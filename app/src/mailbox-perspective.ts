@@ -403,6 +403,13 @@ class CategoryMailboxPerspective extends MailboxPerspective {
           order = Thread.attributes.lastMessageReceivedTimestamp.ascending();
           break;
 
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+          order = Thread.attributes.lastMessageReceivedTimestamp.descending();
+          break;
+
         default:
           order = Thread.attributes.lastMessageReceivedTimestamp.descending();
           break;

@@ -338,6 +338,10 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
       { id: '1', name: `${localized('Date')} (${localized('DESC')})` },
       { id: '2', name: `${localized('Subject')} (${localized('ASC')})` },
       { id: '3', name: `${localized('Subject')} (${localized('DESC')})` },
+      { id: '4', name: `${localized('Sender')} (${localized('ASC')})` },
+      { id: '5', name: `${localized('Sender')} (${localized('DESC')})` },
+      { id: '6', name: `${localized('Size')} (${localized('ASC')})` },
+      { id: '7', name: `${localized('Size')} (${localized('DESC')})` },
     ];
 
     return (

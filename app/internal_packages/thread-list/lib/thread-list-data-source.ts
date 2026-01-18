@@ -8,6 +8,61 @@ import {
   QuerySubscription,
 } from 'mailspring-exports';
 
+const latestMessage = (messages: Message[] = []) => {
+  if (!messages || messages.length === 0) return null;
+  return messages.reduce((current, candidate) => {
+    if (!current) return candidate;
+    const candidateTs = candidate.date ? new Date(candidate.date).getTime() : 0;
+    const currentTs = current.date ? new Date(current.date).getTime() : 0;
+    return candidateTs > currentTs ? candidate : current;
+  }, null as Message | null);
+};
+
+const senderValue = (thread: any) => {
+  const newest = latestMessage(thread.__messages);
+  if (!newest) return '';
+  const contactFallback = newest.from && newest.from[0];
+  return (
+    newest.fromName ||
+    newest.fromEmail ||
+    (contactFallback && (contactFallback.name || contactFallback.email)) ||
+    ''
+  ).toLowerCase();
+};
+
+const sizeValue = (thread: any) => {
+  if (!thread.__messages || thread.__messages.length === 0) return 0;
+  return thread.__messages.reduce((max, message) => {
+    const value = message.size || 0;
+    return value > max ? value : max;
+  }, 0);
+};
+
+const sortThreads = (threads: any[], orderBy?: string) => {
+  if (!orderBy) return threads;
+
+  const apply = (comparator: (a: any, b: any) => number) => {
+    return threads.slice().sort((a, b) => {
+      const result = comparator(a, b);
+      if (result !== 0) return result;
+      return a.id.localeCompare(b.id);
+    });
+  };
+
+  switch (orderBy) {
+    case '4':
+      return apply((a, b) => senderValue(a).localeCompare(senderValue(b)));
+    case '5':
+      return apply((a, b) => senderValue(b).localeCompare(senderValue(a)));
+    case '6':
+      return apply((a, b) => sizeValue(a) - sizeValue(b));
+    case '7':
+      return apply((a, b) => sizeValue(b) - sizeValue(a));
+    default:
+      return threads;
+  }
+};
+
 const _observableForThreadMessages = (id, initialModels) => {
   const subscription = new QuerySubscription<Message>(
     DatabaseStore.findAll<Message>(Message, { threadId: id }),
@@ -82,8 +137,17 @@ const _flatMapJoiningMessages = $threadsResultSet => {
           threadsWithMessages[clone.id] = clone;
         });
 
+        const sortedThreads = sortThreads(
+          threadsResultSet.ids().map(id => threadsWithMessages[id]),
+          AppEnv.config.get('core.lastUsedOrder')
+        );
+
+        const reorderedSet = threadsResultSet.clone() as any;
+        reorderedSet._ids = sortedThreads.map(thread => thread.id);
+        reorderedSet._idToIndexHash = null;
+
         return Rx.Observable.from([
-          QueryResultSet.setByApplyingModels(threadsResultSet, threadsWithMessages),
+          QueryResultSet.setByApplyingModels(reorderedSet, threadsWithMessages),
         ]);
       })
   );

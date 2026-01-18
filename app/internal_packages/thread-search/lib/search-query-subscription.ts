@@ -64,6 +64,13 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
         case '0':
           order = Thread.attributes.lastMessageReceivedTimestamp.ascending();
           break;
+
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+          order = Thread.attributes.lastMessageReceivedTimestamp.descending();
+          break;
       }
     }
 

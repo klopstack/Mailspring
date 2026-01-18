@@ -45,6 +45,21 @@ input:focus {
 
 .thread-list,
 .draft-list {
+  .thread-list-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: @background-secondary;
+    border-bottom: 1px solid fade(@text-color, 8%);
+    color: @text-color;
+
+    .btn {
+      padding: 4px 10px;
+      line-height: 18px;
+    }
+  }
+
   .list-container,
   .scroll-region {
     width: 100%;

@@ -15,6 +15,7 @@ import ThreadListDataSource from './thread-list-data-source';
 class ThreadListStore extends MailspringStore {
   _dataSource?: ListDataSource;
   _dataSourceUnlisten: () => void;
+  _hasMissingSizes: boolean = false;
 
   constructor() {
     super();
@@ -26,6 +27,10 @@ class ThreadListStore extends MailspringStore {
 
   dataSource = () => {
     return this._dataSource;
+  };
+
+  hasMissingSizes = () => {
+    return this._hasMissingSizes;
   };
 
   createListDataSource = () => {
@@ -116,6 +121,28 @@ class ThreadListStore extends MailspringStore {
           item: nextItemFromIndex(keyboardIndex),
         });
       }
+    }
+
+    const orderBy: string | undefined = AppEnv.config.get('core.lastUsedOrder');
+    const shouldCheckSizes = orderBy === '6' || orderBy === '7';
+    const resultSet = next || previous;
+    let hasMissingSizes = false;
+
+    if (shouldCheckSizes && resultSet) {
+      for (const thread of resultSet.models()) {
+        const messages = (thread as any).__messages || [];
+        if (
+          messages.some(m => m && (m.size === null || m.size === undefined || m.size === 0))
+        ) {
+          hasMissingSizes = true;
+          break;
+        }
+      }
+    }
+
+    if (this._hasMissingSizes !== hasMissingSizes) {
+      this._hasMissingSizes = hasMissingSizes;
+      this.trigger(this);
     }
   };
 }

@@ -87,6 +87,16 @@ export class Message extends ModelWithMetadata {
       itemClass: Contact,
     }),
 
+    fromEmail: Attributes.String({
+      modelKey: 'fromEmail',
+      queryable: true,
+    }),
+
+    fromName: Attributes.String({
+      modelKey: 'fromName',
+      queryable: true,
+    }),
+
     replyTo: Attributes.Collection({
       modelKey: 'replyTo',
       itemClass: Contact,
@@ -177,6 +187,11 @@ export class Message extends ModelWithMetadata {
       modelKey: 'folder',
       itemClass: Folder,
     }),
+
+    size: Attributes.Number({
+      modelKey: 'size',
+      queryable: true,
+    }),
   };
 
   public subject: string;
@@ -189,6 +204,8 @@ export class Message extends ModelWithMetadata {
   public events: Event[];
   public date: Date;
   public headerMessageId: string;
+  public fromEmail: string;
+  public fromName: string;
   public threadId: string;
   public snippet: string;
   public starred: boolean;
@@ -198,6 +215,7 @@ export class Message extends ModelWithMetadata {
   public replyToHeaderMessageId: string;
   public forwardedHeaderMessageId: string;
   public folder: Folder;
+  public size: number;
 
   /** indicates that "body" is plain text, not HTML */
   public plaintext: boolean;

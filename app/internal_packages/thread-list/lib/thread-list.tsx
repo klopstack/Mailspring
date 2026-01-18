@@ -34,7 +34,7 @@ import ThreadListContextMenu from './thread-list-context-menu';
 
 class ThreadList extends React.Component<
   Record<string, unknown>,
-  { style: string; syncing: boolean }
+  { style: string; syncing: boolean; missingSizes: boolean }
 > {
   static displayName = 'ThreadList';
 
@@ -54,6 +54,7 @@ class ThreadList extends React.Component<
     this.state = {
       style: 'unknown',
       syncing: false,
+      missingSizes: false,
     };
   }
 
@@ -102,10 +103,21 @@ class ThreadList extends React.Component<
       <FluxContainer
         stores={[ThreadListStore]}
         getStateFromStores={() => {
-          return { dataSource: ThreadListStore.dataSource() };
+          return {
+            dataSource: ThreadListStore.dataSource(),
+            missingSizes: ThreadListStore.hasMissingSizes(),
+          };
         }}
       >
         <FocusContainer collection="thread">
+          {this.state.missingSizes && (
+            <div className="thread-list-banner" role="alert">
+              <span>{localized('Some messages are missing size info. Download sizes to sort accurately.')}</span>
+              <button className="btn btn-primary" onClick={this._fetchMissingSizes}>
+                {localized('Download sizes')}
+              </button>
+            </div>
+          )}
           <MultiselectList
             ref="list"
             footer={this._getFooter()}
@@ -209,6 +221,10 @@ class ThreadList extends React.Component<
   _onSyncStatusChanged = () => {
     const syncing = FocusedPerspectiveStore.current().hasSyncingCategories();
     this.setState({ syncing });
+  };
+
+  _fetchMissingSizes = () => {
+    AppEnv.mailsyncBridge.sendSyncMailNow();
   };
 
   _onShowContextMenu = event => {
