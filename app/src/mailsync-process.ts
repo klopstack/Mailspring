@@ -128,7 +128,6 @@ export class MailsyncProcess extends EventEmitter {
         nodeIntegration: false,
         javascript: false,
         contextIsolation: false,
-        enableRemoteModule: true,
       },
     });
     this._win.setContentSize(350, 90);
@@ -153,6 +152,7 @@ export class MailsyncProcess extends EventEmitter {
 
   _spawnProcess(mode) {
     const env = {
+      ...process.env,
       CONFIG_DIR_PATH: this.configDirPath,
       GMAIL_CLIENT_ID: GMAIL_CLIENT_ID,
       GMAIL_CLIENT_SECRET: GMAIL_CLIENT_SECRET,
@@ -236,24 +236,41 @@ export class MailsyncProcess extends EventEmitter {
             .toString('utf-8')
             .split('\n')
             .pop();
-          const response = JSON.parse(lastLine);
+
+          let response: any;
+          try {
+            response = JSON.parse(lastLine);
+          } catch (err) {
+            // If the Mailsync executable itself failed to run, the logs are not JSON
+            // and may contain system errors (shared library issues, etc). Include this
+            // in the logs so users can fix on their own or report detailed bugs.
+            const rawLog = stripSecrets(buffer.toString());
+            const error = new Error(
+              `${localized(`An unknown error has occurred`)} mailsync: ${code}. ${rawLog}`
+            );
+            (error as any).rawLog = rawLog;
+            return reject(error);
+          }
+
           if (code === 0) {
             resolve({ response, buffer });
           } else {
+            // Mailsync executed fine, and this is an mailsync error in JSON format
             let msg = LocalizedErrorStrings[response.error] || response.error;
             if (response.error_service) {
               msg = `${msg} (${response.error_service.toUpperCase()})`;
             }
             const error = new Error(msg);
             (error as any).rawLog = stripSecrets(response.log);
-            reject(error);
+            return reject(error);
           }
         } catch (err) {
+          const rawLog = stripSecrets(buffer.toString());
           const error = new Error(
             `${localized(`An unknown error has occurred`)} (mailsync: ${code})`
           );
-          (error as any).rawLog = stripSecrets(buffer.toString());
-          reject(error);
+          (error as any).rawLog = rawLog;
+          return reject(error);
         }
       });
     });
@@ -305,7 +322,16 @@ export class MailsyncProcess extends EventEmitter {
       let error = null;
       let lastJSON = null;
       try {
-        lastJSON = outBuffer.length && JSON.parse(outBuffer);
+        if (outBuffer.length) {
+          // Skip debug output that starts with 'dbg::' prefix
+          if (outBuffer.startsWith('dbg::')) {
+            console.log('Skipping debug output from mailsync:', outBuffer);
+          } else {
+            lastJSON = JSON.parse(outBuffer);
+          }
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse mailsync output as JSON:', outBuffer);
       } finally {
         if (lastJSON) {
           if (lastJSON.error) {

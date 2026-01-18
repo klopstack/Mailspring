@@ -23,16 +23,8 @@ class ThreadListVertical extends React.Component<
         >
           <InjectedComponentSet matching={{ role: 'ThreadList' }} />
         </ResizableRegion>
-        <ResizableRegion>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100%',
-              width: '100%',
-              borderTop: '0.5px solid #dddddd',
-            }}
-          >
+        <div style={{ flex: '1 1 0%' }}>
+          <div className="thread-list-vertical">
             <div className="sheet-toolbar" style={{ borderBottom: '0' }}>
               <InjectedComponentSet
                 matching={{
@@ -45,7 +37,7 @@ class ThreadListVertical extends React.Component<
               matching={{ location: WorkspaceStore.Location.MessageList, modes: ['split'] }}
             />
           </div>
-        </ResizableRegion>
+        </div>
       </>
     );
   }

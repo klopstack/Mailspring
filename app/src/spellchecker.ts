@@ -1,13 +1,10 @@
-import { webFrame } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { localized } from './intl';
 
-const { app, MenuItem } = require('@electron/remote');
+const { app } = require('@electron/remote');
 const customDictFilePath = path.join(AppEnv.getConfigDirPath(), 'custom-dict.json');
 
 class Spellchecker {
-
   private _session = require('@electron/remote').getCurrentWebContents().session;
 
   constructor() {
@@ -33,15 +30,18 @@ class Spellchecker {
     } else {
       setTimeout(initHandler, 5000);
     }
-
   }
 
   _switchToLanguage = (lang: string | undefined | null) => {
     if (lang === null || lang === undefined || lang === '') {
       lang = app.getLocale() || 'en-US';
     }
-
-    this._session.setSpellCheckerLanguages([lang]);
+    const supported: string[] = this._session.availableSpellCheckerLanguages || [];
+    if (supported.includes(lang)) {
+      this._session.setSpellCheckerLanguages([lang]);
+    } else if (lang.includes('-') && supported.includes(lang.split('-')[0])) {
+      this._session.setSpellCheckerLanguages([lang.split('-')[0]]);
+    }
   };
 
   _migrateFromCustomDict = () => {
@@ -58,13 +58,8 @@ class Spellchecker {
       }
       const loadedDict = JSON.parse(fileData);
       Object.keys(loadedDict).forEach(word => this._session.addWordToSpellCheckerDictionary(word));
-      fs.unlink(customDictFilePath, () => { });
+      fs.unlink(customDictFilePath, () => {});
     });
-  }
-
-
-  isMisspelled = (word: string) => {
-    return webFrame.isWordMisspelled(word)
   };
 
   learnWord = (word: string) => {
@@ -75,40 +70,6 @@ class Spellchecker {
   unlearnWord = (word: string) => {
     this._session.removeWordFromSpellCheckerDictionary(word);
   };
-
-  appendSpellingItemsToMenu = async ({ menu, word, onCorrect, onDidLearn }) => {
-
-    if (this.isMisspelled(word)) {
-      const corrections = webFrame.getWordSuggestions(word);
-      if (corrections.length > 0) {
-        corrections.forEach(correction => {
-          menu.append(
-            new MenuItem({
-              label: correction,
-              click: () => onCorrect(correction),
-            })
-          );
-        });
-      } else {
-        menu.append(new MenuItem({ label: localized('No Guesses Found'), enabled: false }));
-      }
-      menu.append(new MenuItem({ type: 'separator' }));
-
-      menu.append(
-        new MenuItem({
-          label: localized('Learn Spelling'),
-          click: () => {
-            this.learnWord(word);
-            if (onDidLearn) {
-              onDidLearn(word);
-            }
-          },
-        })
-      );
-      menu.append(new MenuItem({ type: 'separator' }));
-    }
-  };
-
 }
 
 export default new Spellchecker();

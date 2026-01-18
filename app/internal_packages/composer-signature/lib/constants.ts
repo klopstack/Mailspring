@@ -4,8 +4,6 @@ import { localized } from 'mailspring-exports';
 import ReactDOMServer from 'react-dom/server';
 import Templates from './templates';
 
-export const RAW_TEMPLATE_NAME = 'raw';
-
 export const DataShape = [
   {
     key: 'name',
@@ -44,12 +42,24 @@ export const DataShape = [
     label: localized('LinkedIn URL'),
   },
   {
+    key: 'mediumURL',
+    label: localized('Medium Handle'),
+  },
+  {
+    key: 'githubURL',
+    label: localized('GitHub Username'),
+  },
+  {
+    key: 'youtubeURL',
+    label: localized('YouTube'),
+  },
+  {
     key: 'twitterHandle',
     label: localized('Twitter Handle'),
   },
   {
     key: 'instagramURL',
-    label: localized('Instagram URL')
+    label: localized('Instagram URL'),
   },
   {
     key: 'tintColor',
@@ -61,7 +71,7 @@ export const DataShape = [
 export const ResolveSignatureData = data => {
   data = { ...data };
 
-  ['websiteURL', 'facebookURL'].forEach(key => {
+  ['websiteURL', 'facebookURL', 'youtubeURL'].forEach(key => {
     if (data[key] && !data[key].includes(':')) {
       data[key] = `http://${data[key]}`;
     }
@@ -74,6 +84,22 @@ export const ResolveSignatureData = data => {
     }
   }
 
+  // sanitize medium handle
+  if (data.mediumURL) {
+    if (!data.mediumURL.includes('medium.com')) {
+      if (!data.mediumURL.startsWith('@')) {
+        data.mediumURL = `@${data.mediumURL}`;
+      }
+      data.mediumURL = `https://www.medium.com/${data.mediumURL}`;
+    }
+  }
+
+  // sanitize github username
+  if (data.githubURL) {
+    if (!data.githubURL.includes('github.com')) {
+      data.githubURL = `https://www.github.com/${data.githubURL}`;
+    }
+  }
   // sanitize twitter handle
   if (data.twitterHandle) {
     if (data.twitterHandle.includes('/')) {
@@ -89,16 +115,10 @@ export const ResolveSignatureData = data => {
 
   if (data.photoURL === 'gravatar') {
     const hash = crypto
-      .createHash('md5')
+      .createHash('sha256')
       .update((data.email || '').toLowerCase().trim())
       .digest('hex');
     data.photoURL = `https://www.gravatar.com/avatar/${hash}/?s=160&msw=160&msh=160`;
-  }
-
-  if (data.photoURL === 'twitter') {
-    data.photoURL = `https://twitter.com/${
-      data.twitterHandle
-    }/profile_image?size=original&msw=128&msh=128`;
   }
 
   if (data.photoURL === 'company') {
@@ -117,7 +137,6 @@ export const ResolveSignatureData = data => {
       data.instagramURL = `https://www.instagram.com/${data.instagramURL}`;
     }
   }
-
 
   return data;
 };

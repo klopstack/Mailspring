@@ -1,0 +1,72 @@
+name: Build for Linux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Fail if branch is not master
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "This workflow can only be run on master branch to ensure code-signed builds come from merged PRs"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            software-properties-common \
+            autoconf automake build-essential clang cmake execstack fakeroot git \
+            libc-ares-dev libctemplate-dev libcurl4-openssl-dev libglib2.0-dev \
+            libicu-dev libsasl2-dev libsasl2-modules libsasl2-modules-gssapi-mit \
+            libsecret-1-dev libssl-dev libnss3 libnss3-dev libtidy-dev libtool \
+            libxext-dev libxkbfile-dev libxml2-dev libxtst-dev pkg-config rpm \
+            uuid-dev xvfb
+          # Note: dropped g++-5 and libgnome-keyring-dev (not available on 22.04).
+          # No PPA needed on 22.04 for these packages.
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # LTS; change to '22' if you’re ready for current
+          cache: 'npm' # enables npm cache based on lockfile
+
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: .
+
+      - name: Setup AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: DEBUG=electron-packager npm run build
+
+      - uses: snapcore/action-build@v1
+        id: build
+
+      - uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: edge
+
+      - name: Sync Artifacts to S3
+        run: |
+          aws s3 sync app/dist/ "s3://mailspring-builds/client/$(git rev-parse --short=8 HEAD)/linux" \
+            --acl public-read \
+            --exclude "*" --include *.deb --include *.rpm

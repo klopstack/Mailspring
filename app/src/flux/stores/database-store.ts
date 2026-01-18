@@ -2,7 +2,7 @@
 import path from 'path';
 import createDebug from 'debug';
 import childProcess, { ChildProcess } from 'child_process';
-import LRU from 'lru-cache';
+import { LRUCache } from 'lru-cache';
 import Sqlite3 from 'better-sqlite3';
 
 import { ExponentialBackoffScheduler } from '../../backoff-schedulers';
@@ -131,7 +131,7 @@ Section: Database
 class DatabaseStore extends MailspringStore {
   _open = false;
   _waiting = [];
-  _preparedStatementCache = new LRU<string, Sqlite3.Statement<any[]>>({ max: 500 });
+  _preparedStatementCache = new LRUCache<string, Sqlite3.Statement<any[]>>({ max: 500 });
   _databasePath = databasePath(AppEnv.getConfigDirPath(), AppEnv.inSpecMode());
   _db?: Sqlite3.Database;
 
@@ -214,6 +214,7 @@ class DatabaseStore extends MailspringStore {
   // If a query is made before the database has been opened, the query will be
   // held in a queue and run / resolved when the database is ready.
   _query(query: SQLString, values: SQLValue[] = [], background = false) {
+    // eslint-disable-next-line no-async-promise-executor
     return new Promise<{ [key: string]: any }[]>(async (resolve, reject) => {
       if (!this._open) {
         this._waiting.push(() => this._query(query, values).then(resolve, reject));
@@ -332,7 +333,7 @@ class DatabaseStore extends MailspringStore {
 
         // Some errors require action before the query can be retried
         if (new RegExp(schemaChangedStr, 'i').test(errString)) {
-          this._preparedStatementCache.del(query);
+          this._preparedStatementCache.delete(query);
         }
       }
       scheduler.nextDelay();
@@ -367,6 +368,7 @@ class DatabaseStore extends MailspringStore {
       });
     }
 
+    // eslint-disable-next-line no-async-promise-executor
     return new Promise<AgentResponse>(async resolve => {
       if (!this._agent) {
         // Something bad has happened and we were immediately unable to spawn the query helper.

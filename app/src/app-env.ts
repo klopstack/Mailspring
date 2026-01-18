@@ -152,10 +152,12 @@ export default class AppEnvConstructor {
       resourcePath: this.getLoadSettings().resourcePath,
     });
 
+
     // https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers/onerror
     window.onerror = (message, url, line, column, originalError) => {
       if (!originalError && !message) return;
       if (!originalError) originalError = new Error(`${message}`);
+
 
       if (!this.inDevMode()) {
         return this.reportError(originalError, { url, line, column });
@@ -199,6 +201,28 @@ export default class AppEnvConstructor {
   // `AppEnv.reportError` hooks into test failures and dev tool popups.
   //
   reportError(error, extra: any = {}) {
+    // Check if this error should be ignored and not reported to Sentry
+    const errorMessage = `${error}`.toLowerCase();
+    
+    // ResizeObserver errors happen infrequently but spam Sentry with thousands of reports
+    if (errorMessage.includes('resizeobserver') || errorMessage.includes('resize observer')) {
+      return;
+    }
+    
+    // File system errors that are commonly "file not found" or similar
+    if (errorMessage.includes('enoent')) {
+      return;
+    }
+    
+    // Authentication errors - these are user configuration issues, not bugs
+    if (
+      errorMessage.includes('authentication error') ||
+      errorMessage.includes('check your username and password') ||
+      (errorMessage.includes('smtp') && errorMessage.includes('authentication'))
+    ) {
+      return;
+    }
+
     try {
       extra.pluginIds = this._findPluginsFromError(error);
     } catch (err) {
@@ -403,7 +427,8 @@ export default class AppEnvConstructor {
     if (process.platform === 'linux') {
       const dimensions = this.getWindowDimensions();
       const display =
-        require('@electron/remote').screen.getDisplayMatching(dimensions) || require('@electron/remote').screen.getPrimaryDisplay();
+        require('@electron/remote').screen.getDisplayMatching(dimensions) ||
+        require('@electron/remote').screen.getPrimaryDisplay();
       const x = display.bounds.x + (display.bounds.width - dimensions.width) / 2;
       const y = display.bounds.y + (display.bounds.height - dimensions.height) / 2;
 
@@ -781,7 +806,10 @@ export default class AppEnvConstructor {
   }
 
   async showOpenDialog(options: Electron.OpenDialogOptions, callback: (paths: string[]) => void) {
-    const result = await require('@electron/remote').dialog.showOpenDialog(this.getCurrentWindow(), options);
+    const result = await require('@electron/remote').dialog.showOpenDialog(
+      this.getCurrentWindow(),
+      options
+    );
     callback(result.filePaths);
   }
 
@@ -789,7 +817,10 @@ export default class AppEnvConstructor {
     if (options.title == null) {
       options.title = 'Save File';
     }
-    const result = await require('@electron/remote').dialog.showSaveDialog(this.getCurrentWindow(), options);
+    const result = await require('@electron/remote').dialog.showSaveDialog(
+      this.getCurrentWindow(),
+      options
+    );
     callback(result.filePath);
   }
 
@@ -811,7 +842,9 @@ export default class AppEnvConstructor {
 
     let winToShow = null;
     if (showInMainWindow) {
-      winToShow = require('@electron/remote').getGlobal('application').getMainWindow();
+      winToShow = require('@electron/remote')
+        .getGlobal('application')
+        .getMainWindow();
     }
 
     if (!detail) {

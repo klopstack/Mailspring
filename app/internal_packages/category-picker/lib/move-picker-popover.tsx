@@ -51,9 +51,11 @@ export default class MovePickerPopover extends Component<
     this._registerObservables();
   }
 
-  componentWillReceiveProps(nextProps) {
-    this._registerObservables(nextProps);
-    this.setState(this._recalculateState(nextProps));
+  componentDidUpdate(prevProps: MovePickerPopoverProps) {
+    if (prevProps.account !== this.props.account || prevProps.threads !== this.props.threads) {
+      this._registerObservables();
+      this.setState(this._recalculateState(this.props));
+    }
   }
 
   componentWillUnmount() {
@@ -189,6 +191,10 @@ export default class MovePickerPopover extends Component<
     }
   };
 
+  _onCompleteAutosuggest = item => {
+    this.setState(this._recalculateState(this.props, { searchValue: item.displayName }));
+  };
+
   _onSearchValueChange = event => {
     this.setState(this._recalculateState(this.props, { searchValue: event.target.value }));
   };
@@ -261,6 +267,7 @@ export default class MovePickerPopover extends Component<
           itemKey={item => item.id}
           itemContent={this._renderItem}
           onSelect={this._onSelectCategory}
+          onExpand={this._onCompleteAutosuggest}
           onEscape={this._onEscape}
           defaultSelectedIndex={this.state.searchValue === '' ? -1 : 0}
         />

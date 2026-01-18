@@ -1,5 +1,5 @@
 import _ from 'underscore';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import * as Actions from '../actions';
 import DatabaseStore from './database-store';
 import { AccountStore } from './account-store';
@@ -14,7 +14,7 @@ import * as Utils from '../models/utils';
 import InlineStyleTransformer from '../../services/inline-style-transformer';
 import SanitizeTransformer from '../../services/sanitize-transformer';
 import DOMUtils from '../../dom-utils';
-import { Thread } from '../models/Thread';
+import { Thread } from '../models/thread';
 import { convertToPlainText, convertFromHTML } from '../../components/composer-editor/conversion';
 import {
   wrapPlaintext,
@@ -50,7 +50,7 @@ class DraftFactory {
     // Be sure to match over multiple lines with [\s\S]*
     // Regex explanation here: https://regex101.com/r/vO6eN2/1
     let transformed = (content || '').replace(cidRegexp, '');
-    transformed = await SanitizeTransformer.run(transformed, SanitizeTransformer.Preset.UnsafeOnly);
+    transformed = await SanitizeTransformer.run(transformed);
     transformed = await InlineStyleTransformer.run(transformed);
     return transformed;
   }

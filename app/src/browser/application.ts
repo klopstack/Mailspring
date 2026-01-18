@@ -22,6 +22,11 @@ import ConfigPersistenceManager from './config-persistence-manager';
 import moveToApplications from './move-to-applications';
 import { MailsyncProcess } from '../mailsync-process';
 import Config from '../config';
+import { registerQuickpreviewIPCHandlers } from './quickpreview-ipc';
+import {
+  handleWindowsToastXMLProtocolAction,
+  registerNotificationIPCHandlers,
+} from './notification-ipc';
 
 let clipboard = null;
 
@@ -136,7 +141,6 @@ export default class Application extends EventEmitter {
       this.touchBar = new ApplicationTouchBar(resourcePath);
     }
 
-    this.setupJavaScriptArguments();
     this.handleEvents();
     this.handleLaunchOptions(options);
 
@@ -254,12 +258,6 @@ export default class Application extends EventEmitter {
     } else {
       fs.unlink(filePath, callback);
     }
-  }
-
-  // Configures required javascript environment flags.
-  setupJavaScriptArguments() {
-    app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-    app.commandLine.appendSwitch('js-flags', '--harmony');
   }
 
   openWindowsForTokenState() {
@@ -455,7 +453,11 @@ export default class Application extends EventEmitter {
     this.on('application:view-license', () => {
       // Workaround to correctly get the unpacked path of the licenses file.
       // For more information, see: https://github.com/electron/electron/issues/6262
-      shell.openPath(path.join(this.resourcePath, 'static', 'all_licenses.html').replace("app.asar", "app.asar.unpacked"));
+      shell.openPath(
+        path
+          .join(this.resourcePath, 'static', 'all_licenses.html')
+          .replace('app.asar', 'app.asar.unpacked')
+      );
     });
 
     if (process.platform === 'darwin') {
@@ -539,6 +541,19 @@ export default class Application extends EventEmitter {
         app.dock.setBadge(value);
       } else if (app.setBadgeCount) {
         app.setBadgeCount(value.length ? value.replace('+', '') / 1 : 0);
+      }
+    });
+
+    const dockMenu = Menu.buildFromTemplate([
+      {
+        label: localized('Compose New Message'),
+        click: () => global.application.emit('application:new-message'),
+      },
+    ]);
+
+    app.whenReady().then(() => {
+      if (process.platform === 'darwin') {
+        app.dock.setMenu(dockMenu);
       }
     });
 
@@ -720,6 +735,9 @@ export default class Application extends EventEmitter {
       const sourceWindow = BrowserWindow.fromWebContents(event.sender);
       sourceWindow.setSize(params.width, params.height);
     });
+
+    registerQuickpreviewIPCHandlers(ipcMain);
+    registerNotificationIPCHandlers(ipcMain);
   }
 
   // Public: Executes the given command.
@@ -809,7 +827,7 @@ export default class Application extends EventEmitter {
   // Open a mailto:// url.
   //
   openUrl(urlToOpen) {
-    const parts = url.parse(urlToOpen);
+    const parts = url.parse(urlToOpen, true);
     const main = this.windowManager.get(WindowManager.MAIN_WINDOW);
 
     if (!main) {
@@ -820,7 +838,12 @@ export default class Application extends EventEmitter {
     if (parts.protocol === 'mailto:') {
       main.sendMessage('mailto', urlToOpen);
     } else if (parts.protocol === 'mailspring:') {
-      if (parts.host === 'plugins') {
+      // Handle notification action URLs from Windows toast notifications
+      // These URLs are triggered when users click buttons on Windows toast notifications
+      // since Windows toast XML with activationType="background" doesn't work reliably with Electron
+      if (parts.host.startsWith('notification-')) {
+        handleWindowsToastXMLProtocolAction(parts);
+      } else if (parts.host === 'plugins') {
         main.sendMessage('changePluginStateFromUrl', urlToOpen);
       } else {
         main.sendMessage('openThreadFromWeb', urlToOpen);

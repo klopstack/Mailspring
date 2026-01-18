@@ -28,14 +28,21 @@ export class PluginMetadata extends Model {
     this.version = this.version || 0;
   }
 
-  get id() {
-    return this.pluginId;
-  }
-
-  set id(pluginId) {
-    this.pluginId = pluginId;
-  }
+  // Override id to redirect to pluginId
+  // Using Object.defineProperty to avoid TS5 property/accessor conflict
 }
+
+// Define id accessor after class declaration to work around TypeScript 5 restrictions
+Object.defineProperty(PluginMetadata.prototype, 'id', {
+  get(this: PluginMetadata) {
+    return this.pluginId;
+  },
+  set(this: PluginMetadata, pluginId: string) {
+    this.pluginId = pluginId;
+  },
+  enumerable: true,
+  configurable: true,
+});
 
 /**
  Plugins can attach arbitrary JSON data to any model that subclasses
@@ -79,11 +86,14 @@ export class ModelWithMetadata extends Model {
       return null;
     }
     const value = JSON.parse(JSON.stringify(metadata.value));
-    if (value.expiration) {
-      value.expiration = new Date(value.expiration * 1000);
+    if (value === null || value === undefined) {
+      return null;
     }
     if (Object.keys(value).length === 0) {
       return null;
+    }
+    if (value.expiration) {
+      value.expiration = new Date(value.expiration * 1000);
     }
     return value;
   }

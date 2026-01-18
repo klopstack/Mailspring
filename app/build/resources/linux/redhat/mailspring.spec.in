@@ -7,14 +7,16 @@ URL:            https://getmailspring.com/
 AutoReqProv:    no # Avoid libchromiumcontent.so missing dependency
 
 %ifarch i386 i486 i586 i686
-Requires: lsb-core-noarch, libXss.so.1, libsecret-1.so.0, ca-certificates
+Recommends: lsb-core-noarch
+Requires: libXss.so.1, libsecret-1.so.0, libtidy.so.5, ca-certificates
 %if 0%{?rhel} >= 8
 Requires: libappindicator-gtk3
 %else
 Requires: libappindicator
 %endif
 %else
-Requires: lsb-core-noarch, libXss.so.1()(64bit), libsecret-1.so.0()(64bit), ca-certificates
+Recommends: lsb-core-noarch
+Requires: libXss.so.1()(64bit), libsecret-1.so.0()(64bit), libtidy.so.5()(64bit), ca-certificates
 %if 0%{?rhel} >= 8
 Requires: libappindicator-gtk3
 %else
@@ -24,6 +26,10 @@ Requires: libappindicator
 
 %description
 <%= description %>
+
+# Don't generate build_id links to prevent conflicts when installing multiple
+# versions of electron apps (`code`, `slack`, etc).
+%define _build_id_links none
 
 %install
 mkdir -p %{buildroot}/usr/share/mailspring

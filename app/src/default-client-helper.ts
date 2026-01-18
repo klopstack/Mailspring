@@ -42,20 +42,10 @@ export class DefaultClientHelperWindows implements DCH {
   }
 
   async resetURLScheme() {
-    const { response } = await require('@electron/remote').dialog.showMessageBox({
-      type: 'info',
-      buttons: [localized('Learn More')],
-      message: localized('Visit Windows Settings to change your default mail client'),
-      detail: localized(
-        "You'll find Mailspring, along with other options, listed in Default Apps > Mail."
-      ),
-    });
-
-    if (response === 0) {
-      shell.openExternal(
-        'http://support.getmailspring.com/hc/en-us/articles/115001881412-Choose-Mailspring-as-the-default-mail-client-on-Windows'
-      );
-    }
+    // On Windows 11 21H2+ (with April 2023 update), we can deep link directly to Mailspring's
+    // default app settings page. On older Windows versions, this falls back to the main
+    // Default Apps page, which is still better than opening a web browser.
+    shell.openExternal('ms-settings:defaultapps?registeredAppUser=Mailspring');
   }
 
   registerForURLScheme(scheme: string, callback = (error?: Error) => {}) {
@@ -80,17 +70,19 @@ export class DefaultClientHelperWindows implements DCH {
         if (!didMakeDefault) {
           const { response } = await require('@electron/remote').dialog.showMessageBox({
             type: 'info',
-            buttons: [localized('Learn More')],
-            defaultId: 1,
+            buttons: [localized('Open Settings'), localized('Cancel')],
+            defaultId: 0,
             message: localized(
               'Visit Windows Settings to finish making Mailspring your mail client'
             ),
-            detail: localized("Click 'Learn More' to view instructions in our knowledge base."),
+            detail: localized(
+              "Click 'Open Settings' to open Windows Settings where you can set Mailspring as your default email app."
+            ),
           });
           if (response === 0) {
-            shell.openExternal(
-              'http://support.getmailspring.com/hc/en-us/articles/115001881412-Choose-Mailspring-as-the-default-mail-client-on-Windows'
-            );
+            // On Windows 11 21H2+ (with April 2023 update), this deep links directly to
+            // Mailspring's default app settings. On older versions, falls back to Default Apps.
+            shell.openExternal('ms-settings:defaultapps?registeredAppUser=Mailspring');
           }
         }
         callback(null);
@@ -132,113 +124,19 @@ export class DefaultClientHelperMac implements DCH {
     return true;
   }
 
-  getLaunchServicesPlistPath(callback: (plist: string) => void) {
-    const secure = `${process.env.HOME}/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist`;
-    const insecure = `${process.env.HOME}/Library/Preferences/com.apple.LaunchServices.plist`;
-
-    fs.exists(secure, exists => (exists ? callback(secure) : callback(insecure)));
-  }
-
-  readDefaults(callback = (result: Error | any, json?: any) => {}) {
-    this.getLaunchServicesPlistPath(plistPath => {
-      const tmpPath = `${plistPath}.${Math.random()}`;
-      exec(`plutil -convert json "${plistPath}" -o "${tmpPath}"`, err => {
-        if (err) {
-          callback(err);
-          return;
-        }
-        fs.readFile(tmpPath, (readErr, data) => {
-          if (readErr) {
-            callback(readErr);
-            return;
-          }
-          try {
-            const json = JSON.parse(data.toString());
-            callback(json.LSHandlers, json);
-            fs.unlink(tmpPath, () => {});
-          } catch (e) {
-            callback(e);
-          }
-        });
-      });
-    });
-  }
-
-  writeDefaults(defaults, callback = (error?: Error) => {}) {
-    this.getLaunchServicesPlistPath(plistPath => {
-      const tmpPath = `${plistPath}.${Math.random()}`;
-      exec(`plutil -convert json "${plistPath}" -o "${tmpPath}"`, err => {
-        if (err) {
-          callback(err);
-          return;
-        }
-        try {
-          let data = fs.readFileSync(tmpPath).toString();
-          data = JSON.parse(data);
-          (data as any).LSHandlers = defaults;
-          data = JSON.stringify(data);
-          fs.writeFileSync(tmpPath, data);
-        } catch (e) {
-          callback(e);
-          return;
-        }
-        exec(`plutil -convert binary1 "${tmpPath}" -o "${plistPath}"`, () => {
-          fs.unlink(tmpPath, () => {});
-          exec(
-            '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user',
-            registerErr => {
-              callback(registerErr);
-            }
-          );
-        });
-      });
-    });
-  }
-
   isRegisteredForURLScheme(scheme: string, callback: (registered: boolean) => void) {
     if (!callback) {
       throw new Error('isRegisteredForURLScheme is async, provide a callback');
     }
-    this.readDefaults(defaults => {
-      for (const def of defaults) {
-        if (def.LSHandlerURLScheme === scheme) {
-          callback(def.LSHandlerRoleAll === bundleIdentifier);
-          return;
-        }
-      }
-      callback(false);
-    });
+    return callback(require('@electron/remote').app.isDefaultProtocolClient(scheme));
   }
 
   resetURLScheme(scheme: string, callback = (error?: Error) => {}) {
-    this.readDefaults(defaults => {
-      // Remove anything already registered for the scheme
-      for (let ii = defaults.length - 1; ii >= 0; ii--) {
-        if (defaults[ii].LSHandlerURLScheme === scheme) {
-          defaults.splice(ii, 1);
-        }
-      }
-      this.writeDefaults(defaults, callback);
-    });
+    return callback(require('@electron/remote').app.removeAsDefaultProtocolClient(scheme));
   }
 
   registerForURLScheme(scheme: string, callback = (error?: Error) => {}) {
-    this.readDefaults(defaults => {
-      // Remove anything already registered for the scheme
-      for (let ii = defaults.length - 1; ii >= 0; ii--) {
-        if (defaults[ii].LSHandlerURLScheme === scheme) {
-          defaults.splice(ii, 1);
-        }
-      }
-
-      // Add our scheme default
-      defaults.push({
-        LSHandlerURLScheme: scheme,
-        LSHandlerRoleAll: bundleIdentifier,
-      });
-
-      this.writeDefaults(defaults, callback);
-    });
+    return callback(require('@electron/remote').app.setAsDefaultProtocolClient(scheme));
   }
 }
 

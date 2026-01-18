@@ -91,8 +91,10 @@ class RootWithTimespan extends React.Component<
     this.state = this.getLoadingState(props);
   }
 
-  componentWillReceiveProps(nextProps) {
-    this.setState(this.getLoadingState(nextProps), () => this._onComputeMetrics());
+  componentDidUpdate(prevProps: { timespan: Timespan; accountIds: string[] }) {
+    if (prevProps.timespan !== this.props.timespan || prevProps.accountIds !== this.props.accountIds) {
+      this.setState(this.getLoadingState(this.props), () => this._onComputeMetrics());
+    }
   }
 
   getLoadingState({ timespan }) {
@@ -415,8 +417,7 @@ class RootWithTimespan extends React.Component<
             {localizedReactFragment(
               `These features were %@ of the messages you sent
             in this time period, so these numbers do not reflect all of your activity. To enable
-            read receipts and link tracking on emails you send, click the %@ or link tracking %@ icons in the composer.
-            `,
+            read receipts and link tracking on emails you send, click the %@ or link tracking %@ icons in the composer.`,
               lowTrackingPhrase,
               <RetinaImg
                 name="icon-activity-mailopen.png"

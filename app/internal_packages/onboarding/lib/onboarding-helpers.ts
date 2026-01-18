@@ -12,7 +12,6 @@ import {
 import MailspringProviderSettings from './mailspring-provider-settings.json';
 import MailcoreProviderSettings from './mailcore-provider-settings.json';
 import dns from 'dns';
-import fetch from 'node-fetch';
 import {
   GMAIL_CLIENT_ID,
   GMAIL_CLIENT_SECRET,
@@ -23,6 +22,7 @@ import {
   GMAIL_SCOPES,
   CODE_CHALLENGE,
 } from './onboarding-constants';
+import { parseStringPromise } from "xml2js";
 
 interface TokenResponse {
   access_token: string;
@@ -125,19 +125,23 @@ export async function expandAccountWithCommonSettings(account: Account) {
       imap_port: imap.port,
       imap_username: usernameWithFormat('email'),
       imap_password: populated.settings.imap_password,
-      imap_security: imap.starttls ? 'STARTTLS' : imap.ssl ? 'SSL / TLS' : 'none',
+      imap_security: imap.starttls ? 'STARTTLS' : imap.ssl || imap.tls ? 'SSL / TLS' : 'none',
       imap_allow_insecure_ssl: false,
 
       smtp_host: (smtp.hostname || '').replace('{domain}', domain),
       smtp_port: smtp.port,
       smtp_username: usernameWithFormat('email'),
       smtp_password: populated.settings.smtp_password || populated.settings.imap_password,
-      smtp_security: smtp.starttls ? 'STARTTLS' : smtp.ssl ? 'SSL / TLS' : 'none',
+      smtp_security: smtp.starttls ? 'STARTTLS' : smtp.ssl || smtp.tls ? 'SSL / TLS' : 'none',
       smtp_allow_insecure_ssl: false,
 
       container_folder: '',
     };
     populated.settings = Object.assign(defaults, populated.settings);
+    return populated;
+  }
+
+  if (await TryThunderbirdAutoconfig(populated, account)){
     return populated;
   }
 
@@ -152,22 +156,50 @@ export async function expandAccountWithCommonSettings(account: Account) {
     }
     console.log(`Using Mailspring Template: ${JSON.stringify(mstemplate, null, 2)}`);
   } else {
-    console.log(`Using Empty Template`);
-    mstemplate = {};
+    console.log(`Using Fallback Template`);
+    mstemplate = {
+      "imap_host": `imap.${domain}`,
+      "imap_user_format": "email",
+      "smtp_host": `smtp.${domain}`,
+      "smtp_user_format": "email",
+      "container_folder": "",
+    };
+  }
+
+  let imap_port = Number(mstemplate.imap_port);
+  let imap_security = mstemplate.imap_security;
+  if (!imap_security && !imap_port) {
+    imap_security = 'SSL / TLS';
+    imap_port = 993;
+  } else if (!imap_security && imap_port) {
+    imap_security = imap_port === 993 ? 'SSL / TLS' : 'none';
+  } else if (imap_security && !imap_port) {
+    imap_port = imap_security === 'SSL / TLS' ? 993 : 143;
+  }
+
+  let smtp_port = Number(mstemplate.smtp_port);
+  let smtp_security = mstemplate.smtp_security;
+  if (!smtp_security && !smtp_port) {
+    smtp_security = 'SSL / TLS';
+    smtp_port = 465;
+  } else if (!smtp_security && smtp_port) {
+    smtp_security = smtp_port === 587 ? 'STARTTLS' : smtp_port === 465 ? 'SSL / TLS' : 'none';
+  } else if (smtp_security && !smtp_port) {
+    smtp_port = smtp_security === 'STARTTLS' ? 587 : smtp_security === 'SSL / TLS' ? 465 : 25;
   }
 
   const defaults = {
-    imap_host: mstemplate.imap_host,
-    imap_port: mstemplate.imap_port || 993,
+    imap_host: mstemplate.imap_host.replace('%EMAILDOMAIN%', domain),
+    imap_port: imap_port,
     imap_username: usernameWithFormat(mstemplate.imap_user_format),
     imap_password: populated.settings.imap_password,
-    imap_security: mstemplate.imap_security || 'SSL / TLS',
+    imap_security: imap_security,
     imap_allow_insecure_ssl: mstemplate.imap_allow_insecure_ssl || false,
-    smtp_host: mstemplate.smtp_host,
-    smtp_port: mstemplate.smtp_port || 465,
+    smtp_host: mstemplate.smtp_host.replace('%EMAILDOMAIN%', domain),
+    smtp_port: smtp_port,
     smtp_username: usernameWithFormat(mstemplate.smtp_user_format),
     smtp_password: populated.settings.smtp_password || populated.settings.imap_password,
-    smtp_security: mstemplate.smtp_security || 'SSL / TLS',
+    smtp_security: smtp_security,
     smtp_allow_insecure_ssl: mstemplate.smtp_allow_insecure_ssl || false,
     container_folder: mstemplate.container_folder,
   };
@@ -232,6 +264,17 @@ export async function buildGmailAccountFromAuthResponse(code: string) {
 }
 
 export async function buildO365AccountFromAuthResponse(code: string) {
+  return buildMicrosoftAccountFromAuthResponse(code, 'office365');
+}
+
+export async function buildOutlookAccountFromAuthResponse(code: string) {
+  return buildMicrosoftAccountFromAuthResponse(code, 'outlook');
+}
+
+export async function buildMicrosoftAccountFromAuthResponse(
+  code: string,
+  provider: 'outlook' | 'office365'
+) {
   /// Exchange code for an access token
   const { access_token, refresh_token } = await fetchPostWithFormBody<TokenResponse>(
     `https://login.microsoftonline.com/common/oauth2/v2.0/token`,
@@ -263,7 +306,7 @@ export async function buildO365AccountFromAuthResponse(code: string) {
     new Account({
       name: me.displayName,
       emailAddress: me.mail,
-      provider: 'office365',
+      provider: provider,
       settings: {
         refresh_client_id: O365_CLIENT_ID,
         refresh_token: refresh_token,
@@ -337,4 +380,135 @@ export async function finalizeAndValidateAccount(account: Account) {
   // Record the date of successful auth
   account.authedAt = new Date();
   return account;
+}
+
+async function TryThunderbirdAutoconfig(populated: Account, account: Account) {
+  function extractServerDetails(server: { hostname: string;port: string;username: string;socketType: string; }, account: Account) {
+    const details = {
+      host: server.hostname,
+      port: server.port,
+      username: "",
+      security: "",
+    };
+
+    switch (server.username) {
+      case "%EMAILLOCALPART%":
+        details.username = account.emailAddress.split('@')[0];
+        break;
+      default:
+        details.username = account.emailAddress;
+        break;
+    }
+
+    switch (server.socketType) {
+      case "plain":
+        details.security = "None";
+        break;
+      case "STARTTLS":
+        details.security = "STARTTLS";
+        break;
+      case "SSL":
+        details.security = "SSL / TLS";
+        break;
+      default:
+        details.security = "STARTTLS";
+        break;
+    }
+
+    return details;
+  }
+
+  const domain = account.emailAddress
+    .split('@')
+    .pop()
+    .toLowerCase();
+
+  let url = `https://autoconfig.${domain}/mail/config-v1.1.xml`;
+  let autoConfig = await getThunderbirdAutoconfig(url);
+  if (autoConfig === false) {
+    url = `https://${domain}/.well-known/autoconfig/mail/config-v1.1.xml`;
+    autoConfig = await getThunderbirdAutoconfig(url);
+  }
+  // emailProvider could potentially be an array
+  if (autoConfig !== false && autoConfig.emailProvider) {
+    let provider = autoConfig.emailProvider;
+    if (Array.isArray(provider)) {
+      provider = provider.find(p => p.$.id === domain);
+      if (provider === undefined) {
+        return false;
+      }
+    }
+
+    if(provider.incomingServer === undefined || provider.outgoingServer === undefined)
+      return false;
+
+    let imapDetails = null;
+    let smtpDetails = null;
+
+    // Handle IMAP
+    if (Array.isArray(provider.incomingServer)) {
+      for (const incomingServer of provider.incomingServer) {
+        if (incomingServer.$.type === "imap") {
+          imapDetails = extractServerDetails(incomingServer, account);
+          break;
+        }
+      }
+    } else if (provider.incomingServer.$.type === "imap") {
+      imapDetails = extractServerDetails(provider.incomingServer, account);
+    }
+
+    // Handle SMTP
+    if (Array.isArray(provider.outgoingServer)) {
+      for (const outgoingServer of provider.outgoingServer) {
+        if (outgoingServer.$.type === "smtp") {
+          smtpDetails = extractServerDetails(outgoingServer, account);
+          break;
+        }
+      }
+    } else if (provider.outgoingServer.$.type === "smtp") {
+      smtpDetails = extractServerDetails(provider.outgoingServer, account);
+    }
+
+    const settings = {
+      imap_host: imapDetails?.host || `imap.${domain}`,
+      imap_port: imapDetails?.port,
+      imap_username: imapDetails?.username,
+      imap_password: populated.settings.imap_password,
+      imap_security: imapDetails?.security,
+      imap_allow_insecure_ssl: false,
+      smtp_host: smtpDetails?.host || `smtp.${domain}`,
+      smtp_port: smtpDetails?.port,
+      smtp_username: smtpDetails?.username,
+      smtp_password: populated.settings.smtp_password || populated.settings.imap_password,
+      smtp_security: smtpDetails?.security,
+      smtp_allow_insecure_ssl: false,
+      container_folder: "",
+    };
+
+    populated.settings = Object.assign(settings, populated.settings);
+    console.log('Returning populated settings from autoconfig');
+    return populated;
+  } else {
+    return false;
+  }
+}
+
+async function getThunderbirdAutoconfig(url: string) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const body = await response.text();
+    const parsedBody = await parseStringPromise(body, {
+      explicitArray: false,
+      mergeAttrs: false,
+      explicitRoot: false,
+    });
+
+    return parsedBody;
+  } catch (error) {
+    return false;
+  }
 }

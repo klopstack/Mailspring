@@ -1,5 +1,237 @@
 # Mailspring Changelog
 
+## 1.17.0 (1/12/2025)
+
+This is Mailspring's biggest update in a while!
+
+The "infinite sync bug" that impacted iCloud accounts has been fixed, and we reviewed and applied many other patches to Mailcore and libetpan to improve mail sync.
+
+This release includes significant security updates - Mailspring now uses the system-bundled sasl2, ssl, crypto and curl libraries on all Linux platforms, and the UI has moved to the latest version of Electron. (On Linux, Electron 39 also brings native support for Wayland!)
+
+This release resolves issues with spellcheck on Windows, and also adds support for Windows toast notifications with inline actions.
+
+Bug Fixes:
+
+- On Windows, the Start Menu integration has been updated for Windows 11 and the "default mail client" option now links directly to Mailspring's page in Windows Settings.
+
+- On Windows, `mailto:` link handling no longer breaks due to a launch argument parsing issue.
+
+- On Windows, spellcheck now works correctly by using the DOM spellcheck attribute with typing debounce. (#2535)
+
+- On macOS, notifications now correctly respect Do Not Disturb settings. (#2525)
+
+- On macOS, Mailspring can now correctly create and delete the LaunchAgent file for launch on startup. (#2509)
+
+- On Linux, the tray icon no longer shares an ID with other Electron apps. (#2529)
+
+- On Linux, native Wayland support is now enabled in the Snap package. (#2527)
+
+- The "Message Clipped - Show All" window no longer has encoding issues. (#2526)
+
+- "Download All Attachments" no longer incorrectly renames files with hyphen-number patterns. (#2531)
+
+- Additional safeguards have been added to attachment preview generation. (#2523)
+
+Localization:
+
+- Hungarian is now a manually verified language!
+
+- Brazilian Portuguese (pt-BR) translation has been updated. (#2504, #2506)
+
+Developer:
+
+- Mailspring now uses Electron 39, Chromium 140, and Node.js 22 for improved performance and security.
+
+- Mac, Windows, and Linux builds are now managed entirely with Github Actions, and new Github Actions for mailsync verify that the Linux binary is portable and runs on Ubuntu, Fedora, and Arch Linux.
+
+- TypeScript has been upgraded from version 3 to version 5. (#2547)
+
+- React has been upgraded from 16.6.0 to 16.9.0. (#2545)
+
+- Windows builds now use GitHub Actions instead of AppVeyor. (#2524)
+
+- Many dependencies have been upgraded to address npm audit issues, including better-sqlite, uuid, ical.js, juice, lru-cache, snarkdown, and node-emoji.
+
+Sync Improvements:
+
+- Fixed multiple memory leaks, race conditions, and potential deadlocks following an in-depth automated code review.
+
+- Fixed CardDAV to avoid re-discovering address books on every sync.
+
+- Fixed SMTP EHLO/HELO with IPv6 addresses on Linux.
+
+- Fixed handling of empty IMAP parts from Outlook.com servers.
+
+- SQLite has been upgraded to the latest version.
+
+- Fixed Windows build compatibility with strptime and timegm functions.
+
+Calendar Preview:
+
+- The Calendar preview now includes a full month view with day, week, and month navigation.
+
+- You can now search for events in the calendar.
+
+- Dragging calendar events will soon update their time, making it easier to reschedule items.
+
+- CalDAV sync now supports calendar colors, recurring events with exceptions, and smart rate limiting for 429 responses.
+
+- CalDAV now uses ctags to skip unnecessary syncs when calendars haven't changed.
+
+- Fixed CalDAV crashes on Gmail accounts when parsing privilege-set.
+
+## 1.16.0
+
+- Thunderbird-style Autoconfiguration (#2493)
+
+- Fix in-app previews for PDF attachments on Windows / Linux
+
+- Update and improve zh-TW Traditional Chinese locale (#2498)
+
+- Update Czech translation (#2500)
+
+- snap: Use core24 as base (#2497)
+
+- Change lsb-core-noarch to be an optional dependency in the RPM package. (#2503)
+
+- Fix a few misc application errors logged to our reporting service
+
+- Upgrade to Electron 37.2.2 - Chromium 138, V8 13.8, and Node.js 22.16 for faster JavaScript execution and better email rendering.
+
+## 1.15.1
+
+This is a patch release that resolves several user-reported issues. Thank
+
+- On Windows, notifications could not appear because of an issue checking Windows "Quiet Hours" settings
+
+- Dragging and dropping file attachments to the composer or the signature editor resulted in a path error.
+
+- On Windows, you may need to install Language Packs for some languages to be available for spellcheck, and this no longer causes an error.
+
+- The RPM build no longer generate build_id links to prevent conflicts when installing multiple Electron apps.
+
+## 1.15.0
+
+Happy 2025! This version of Mailspring upgraedes the app to Electron 33 and Chromium 130, ensuring the latest upstream bug fixes, security patches and improvements are available in the app.
+
+- macOS 10.15 (Catalina) is no longer supported. macOS 11 (Big Sur) or later is required.
+
+- We are considering dropping Ubuntu 16, Ubuntu 18 and other Linux releases >6 years old. If this would impact you, please let me know at ben@foundry376.com! It's getting harder to build a mailsync binary because our CI services are dropping support.
+
+Fixes:
+
+- Mailspring now conforms to the AppStream metainfo standard. Thanks @mischkl!
+
+## 1.14.0
+
+This version of Mailspring includes several improvements:
+
+- Mailspring now connects to Outlook accounts using OAuth.
+
+- The `autoconfig` database used to identify your IMAP and SMTP settings automatically has been upgraded to reflect changes in provider settings.
+
+- On Windows and Linux, previewing attachments is more robust and works with a wider variety of files. These attachments also have rendered previews in the message view.
+
+- Mailspring allows you to add Medium, GitHub and YouTube links to email signatures created in the app. (#2484) Thanks @sudeephazra!
+
+- Subject lines no longer overflow if they contain single long words (#2485) Thanks @probablykasper!
+
+Developer:
+
+- Mailspring now uses Electron 30, a recent supported release based on Chromium M124 - thanks to @Phylu for lots of PRs and manual testing that helped us move up three years of versions (v17 => v30) in the last 12 months!
+
+- The Changelog now mentions security contributions by Positive Technologies, Payatu, and Sonar in v1.13.3.
+
+## 1.13.3
+
+Happy new year! This is a small update to Mailspring with a few important changes:
+
+- On macOS, long-pressing a key to show it's available subtitutions (eg: `e` to see `é, ê, etc.`) now works properly in the email composer. Sorry for the delay fixing this issue, for many non-english speakers on macOS we know it's a core part of your email workflow.
+
+- We now escape subject and participant names in the print modal, ensuring that they render properly for printing. Thanks to Andrialdy R for identifying and documenting a related vulnerability.
+
+- We now use DOMPurify to sanitize the content of HTML emails for display. DOMPurify is maintained by a team of security-oriented web engineers and will ensure Mailspring protects you from the widest possible range of XSS attacks and exploits. Thanks to Yaniv Nizry of [Sonar](https://sonarsource.com) for identifying and reporting weaknesses in our old sanitizer.
+
+- As part of the DOMPurify change, Mailspring now supports a smaller range of links in emails (https://, tel://, mailto:// etc). Thanks to Vaibhav Rajput and Prajyot Chemburkar of [Payatu](https://payatu.com/) for reporting that smb:// links were previously allowed and useful in triggering exploits.
+
+## 1.13.2
+
+This is a patch release that fixes several issues:
+
+- Composition events in Mailspring's composer should work as expected. (Typing modifier keys, such as Option-E followed by E to create É)
+
+- The composer warn about several more invalid recipient errors correctly (thanks @Phylu!)
+
+- Dark-mode tray support on Windows has been improved with new icons (thanks @Phylu!)
+
+- The Linux Snap build no longer requests extraneous permissions (thanks @3v1n0!)
+
+## 1.13.1
+
+Mailspring 1.13 now runs on Electron 22, completing a migration process we started in 1.12.0!
+
+If you are upgrading from an old version of Mailspring, download and run 1.12.0 first before installing this version. We've moved from keytar to Electron's safeStorage API for securely storing your email passwords, and version 1.12.0 will perform a migration ensuring your passwords are transitioned.
+
+If you're using the snap version of Mailspring, you may find that Mailspring forgets your passwords when you upgrade. I'm very sorry for the hassle this causes - issues with snap containment in version 1.12.0 caused Mailspring to lose many user's passwords during the upgrade process. If this applies to you, you may see password errors and need to:
+
+    Visit Preferences > Subscription and click Setup Mailspring ID and sign back in to your Mailspring account. (You should see an alert at launch that will remind you which email address you'd used for your Mailspring ID)
+
+    Visit Preferences > Accounts and re-authenticate any accounts shown in red that are having connection difficulty.
+
+## 1.12.0 (10/09/2023)
+
+Features:
+
+- The Windows tray icon styles have been improved, and a new option allows you to opt-out of the red icon style. (Thanks @Phylu)
+
+- Mail rules now support filtering based on the "Reply-to" header. (Thanks @Phylu)
+
+- The "Snooze" UI now allows you to type "600" as a shortcut for for "6:00". (Thanks @ChocoTonic)
+
+Bug Fixes:
+
+- The snooze label is less ambiguous and includes the month and year. (Thanks @Phylu)
+
+Localization:
+
+- British english localizations have been added. (Thanks @danbishop)
+
+- Traditional chinese localizations have been greatly improved. (Thanks @PeterDaveHello)
+
+Developer:
+
+- Mailspring now stores your mail secrets using Electron SafeStorage instead of the deprecated Keytar library thanks to updates by @Phylu. This will allow us to move to a newer version of Electron soon!
+
+- The Snap package now uses core22 and the `gnome` extension. (Thanks @soumyaDghosh)
+
+## 1.11.0 (07/28/2023)
+
+Features:
+
+- The "Move to Folder" menu action allows you to press Tab or the "→" key to complete the name of the highlighted folder, which makes it easier to complete a path in long folder hierarchies.
+
+- Mailspring now properly identifies and formats quoted text from Yahoo and AOL email. (Thanks @nzayatz14)
+
+- On MacOS, the Mailspring icon in the dock now allows you to compose a new message from the context menu. (thanks @Naroh091)
+
+- Mailspring's menu bar icon is now red for new mail and blue for unread mail, which makes it easier to spot a new message that needs attention. (#2433, thanks @marivaldojr)
+
+Bug Fixes:
+
+- Contact sync no longer crashes when a contact has no display name (thanks @ww-daniel-mora)
+
+- The help menu now offers the standard MacOS "menu search" feature (Thanks @probablykasper)
+
+- Colons are allowed in URLs and no longer break Mailspring's link highlighting. (thanks @choptastic!)
+
+- The email preview is no longer in some cases in vertical layout (thanks @glenn2223!)
+
+- Updated Italian translations (thanks @andy00087!)
+
+Developer:
+
+- Mailspring now uses a more restrictive Content-Security-Policy that includes `object-src none; media-src mailspring:; manifest-src none;`. If your plugin packaged media such as sounds, you may need to reference them via the mailspring:// URL syntax (ala 2b75347c) (Thanks to Igor Sak-Sakovskiy of [Positive Technologies](https://www.ptsecurity.com/ww-en/) for a related vulnerability report.)
+
 ## 1.10.8 (12/29/2022)
 
 _Happy new year! Thanks for your continued support - we're celebrating five years of open-source and the 60th Mailspring release!_
@@ -36,7 +268,7 @@ Changes:
 
 - Mailsync now requests fewer emails at a time, fixing compatibility issues with large Office365 accounts. (Thanks @BrandonGillis for extensive testing of this change!)
 
-- Inline image "cid:" references may appear only in `<img src=“”>`, and may not appear elsewhere in message bodies.
+- Inline image "cid:" references may appear only in `<img src=“”>`, and may not appear elsewhere in message bodies. (Thanks to Igor Sak-Sakovskiy of [Positive Technologies](https://www.ptsecurity.com/ww-en/) for this vulnerability report.)
 
 - Mailspring uses iframe sandboxing to disallow interactivity in message bodies, in addition to santizing loaded HTML down to a strict list of tags and attributes.
 

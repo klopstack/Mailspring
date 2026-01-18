@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop">
-  <id>
-    <%= name %>
-  </id>
+  <id><%= name %></id>
   <metadata_license>CC0-1.0</metadata_license>
-  <name>
-    <%= productName %>
-  </name>
-  <summary>
-    <%= description %>
-  </summary>
+  <name><%= productName %></name>
+  <summary><%= description %></summary>
   <description>
     <p>
       Mailspring is a new version of Nylas Mail maintained by one of the original authors. It's
@@ -29,18 +23,26 @@
   <url type="homepage">https://getmailspring.com/</url>
   <url type="bugtracker">https://github.com/Foundry376/Mailspring/issues</url>
   <url type="help">http://support.getmailspring.com/</url>
-  <launchable type="desktop-id">
-    <%= productName %>.desktop
-  </launchable>
+  <launchable type="desktop-id"><%= productName %>.desktop</launchable>
 
   <developer_name>Mailspring</developer_name>
   <project_license>GPL-3.0+</project_license>
 
   <screenshots>
-    <screenshot type="default">https://getmailspring.com/static/img/hero_graphic_linux@2x.png</screenshot>
+    <screenshot type="default">
+      <caption>Mailspring Hero</caption>
+      <image type="source">https://getmailspring.com/static/img/hero_graphic_linux@2x.png</image>
+    </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.14.0" date="2024-09-13" />
+    <release version="1.13.3" date="2024-01-08" />
+    <release version="1.13.2" date="2023-12-10" />
+    <release version="1.13.1" date="2023-11-21" />
+    <release version="1.13.0" date="2023-11-20" />
+    <release version="1.12.0" date="2023-11-14" />
+    <release version="1.11.0" date="2023-07-28" />
     <release version="1.10.8" date="2022-12-29" />
     <release version="1.10.7" date="2022-11-21" />
     <release version="1.10.6" date="2022-08-10" />

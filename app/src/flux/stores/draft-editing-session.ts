@@ -106,7 +106,7 @@ function hotwireDraftBodyState(draft: any, session: DraftEditingSession): Messag
           // equivalent document of the same shape.
           AppEnv.reportError(new Error(`Unable to insert fragment into existing document.`), {
             underlyingError: err,
-            existingSlateShape: convertToShapeWithoutContent(session._mountedEditor.value),
+            existingSlateShape: session._mountedEditor ? convertToShapeWithoutContent(session._mountedEditor.value) : null,
             incomingSlateShape: convertToShapeWithoutContent(inHTMLEditorValue),
           });
           _bodyEditorValue = inHTMLEditorValue;
@@ -315,7 +315,7 @@ export class DraftEditingSession extends MailspringStore {
     }
 
     if (recipientErrors.length > 0) {
-      return { errors: recipientErrors, warnings: recipientWarnings };
+      return { recipientErrors: recipientErrors, recipientWarnings: recipientWarnings };
     }
 
     let cleaned = QuotedHTMLTransformer.removeQuotedHTML(this._draft.body.trim());
