@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  mailsync-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mailsync-builder:local
+    environment:
+      # Set these from the host when invoking compose: HOST_UID=${UID} HOST_GID=${GID}
+      - HOST_UID=${UID:-1000}
+      - HOST_GID=${GID:-1000}
+    volumes:
+      # Mount the repo into /workspace so build can access sources
+      - ../../:/workspace:cached
+    working_dir: /workspace
+
+    # Run as root inside the container so the entrypoint can map UID/GID and then run as 'builder'
+    user: "0:0"
+    tty: true
+    stdin_open: true

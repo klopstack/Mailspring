@@ -1,9 +1,12 @@
 {
-  "editor.formatOnSave": true,
+  "editor.formatOnSave": false,
   "[html]": {
     "editor.formatOnSave": false
   },
   "[json]": {
+    "editor.formatOnSave": false
+  },
+  "[cpp]": {
     "editor.formatOnSave": false
   },
   "files.associations": {
@@ -30,5 +33,7 @@
   "files.exclude": {
     "**/*.dll": true
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "cmake.sourceDirectory": "/home/benklop/repos/Mailspring/mailsync",
+  "editor.trimAutoWhitespace": false
 }
