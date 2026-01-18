@@ -34,23 +34,14 @@
 - `.github/workflows/*` — CI matrix and Node versions (CI uses Node 20 on Ubuntu 22.04).
 
 ## Build & dev workflows (commands you should use) ▶️
-- IMPORTANT: All build and test activity MUST be performed inside the project's provided Docker build environments. Do not run native builds/tests directly on the host — use the `docker/mailsync-builder` image and the helper scripts instead.
-  - Example (native build):
-    - docker build -t mailsync-builder docker/mailsync-builder
-    - docker run --rm -it -v "$(pwd)":/workspace -w /workspace --user builder mailsync-builder /usr/local/bin/mailsync-build
-  - Example (run CTest inside container):
-    - mailsync/scripts/run-ctest-in-container.sh --output-on-failure
-  - For focused native C++ smoke tests (e.g. ThreadSearch search_smoke) use:
-    - mailsync/scripts/run-search-smoke-in-container.sh
-  - These containers ensure correct vendor libraries, toolchain, and reproducible build/test behaviour.
 - Client (fast dev):
   - Start in dev mode: npm start (runs `electron ./app --enable-logging --dev`) from repo root.
   - Lint: npm run lint (calls `grunt lint` in the `app` Gruntfile).
   - TypeScript watch: npm run tsc-watch (useful while editing TS only).
   - Build packaged client: npm run build (uses `grunt build-client`).
-- Tests: `npm test` launches `electron ./app --enable-logging --test`. There is also `npm run test-window` for windowed specs. The launcher supports `--spec-directory` and `--spec-file-pattern` flags. For native C++ tests and heavy workloads use the mailsync builder container (see above).
+- Tests: `npm test` launches `electron ./app --enable-logging --test`. There is also `npm run test-window` for windowed specs. The launcher supports `--spec-directory` and `--spec-file-pattern` flags.
 - Native sync engine (Mailsync):
-  - Linux/macOS: `./Mailspring-Sync/build.sh` (see README for vendor build steps: libetpan, mailcore2, OpenSSL). Prefer running this script inside the `mailsync-builder` container for consistent toolchains. The script copies `mailsync` into `app/` as the runtime binary.
+  - Linux/macOS: `./Mailspring-Sync/build.sh` (see README for vendor build steps: libetpan, mailcore2, OpenSSL). The script copies `mailsync` into `app/` as the runtime binary.
   - Windows: use the Visual Studio solution (see `Mailsync.xcodeproj`/Visual Studio configs). The README includes a debug command-line example for `--identity` and `--account` JSON.
   - Note: Mailsync logs and errors are often JSON; failures can be non-JSON native linker errors — keep that in mind when parsing logs.
 

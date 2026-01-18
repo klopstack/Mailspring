@@ -26,6 +26,9 @@ class ThreadListStore extends MailspringStore {
   }
 
   dataSource = () => {
+    if (!this._dataSource) {
+      this._dataSource = new ListTabular.DataSource.Empty();
+    }
     return this._dataSource;
   };
 

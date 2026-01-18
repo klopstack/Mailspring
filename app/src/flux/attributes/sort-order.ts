@@ -16,16 +16,28 @@ DatabaseStore.findBy<Message>(Message)
 Section: Database
 */
 export class SortOrder {
-  public attr: Attribute;
+  public attr: Attribute | null;
   public direction: 'ASC' | 'DESC';
   public collation: string;
+  private rawSQL?: string;
 
-  constructor(attr: Attribute, direction: 'ASC' | 'DESC' = 'DESC') {
+  constructor(attr: Attribute | null, direction: 'ASC' | 'DESC' = 'DESC', rawSQL?: string) {
     this.attr = attr;
     this.direction = direction;
+    this.rawSQL = rawSQL;
+  }
+
+  static raw(sql: string) {
+    return new SortOrder(null, 'ASC', sql);
   }
 
   orderBySQL(klass: typeof Model) {
+    if (this.rawSQL) {
+      return this.rawSQL;
+    }
+    if (!this.attr) {
+      throw new Error('SortOrder requires an attribute unless raw SQL is provided');
+    }
     return `\`${klass.name}\`.\`${this.attr.tableColumn}\` ${
       this.attr.applyCaseInsensitivity ? 'COLLATE NOCASE' : ''
     } ${this.direction}`;

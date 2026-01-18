@@ -25,6 +25,7 @@ import {
   FolderSyncProgressStore,
   Thread,
   TaskFactory,
+  localized,
 } from 'mailspring-exports';
 
 import * as ThreadListColumns from './thread-list-columns';
@@ -32,9 +33,29 @@ import ThreadListScrollTooltip from './thread-list-scroll-tooltip';
 import ThreadListStore from './thread-list-store';
 import ThreadListContextMenu from './thread-list-context-menu';
 
+const ThreadListContent = React.forwardRef<any, any>(
+  ({ missingSizes, onFetchMissingSizes, ...listProps }, ref) => (
+    <React.Fragment>
+      {missingSizes ? (
+        <div className="thread-list-banner" role="alert">
+          <span>
+            {localized('Some messages are missing size info. Download sizes to sort accurately.')}
+          </span>
+          <button className="btn btn-primary" onClick={onFetchMissingSizes}>
+            {localized('Download sizes')}
+          </button>
+        </div>
+      ) : null}
+      <MultiselectList ref={ref} {...listProps} />
+    </React.Fragment>
+  )
+);
+
+ThreadListContent.displayName = 'ThreadListContent';
+
 class ThreadList extends React.Component<
   Record<string, unknown>,
-  { style: string; syncing: boolean; missingSizes: boolean }
+  { style: string; syncing: boolean }
 > {
   static displayName = 'ThreadList';
 
@@ -48,13 +69,13 @@ class ThreadList extends React.Component<
   };
 
   unsub?: () => void;
+  listRef: React.RefObject<MultiselectList> = React.createRef();
 
   constructor(props) {
     super(props);
     this.state = {
       style: 'unknown',
       syncing: false,
-      missingSizes: false,
     };
   }
 
@@ -99,6 +120,27 @@ class ThreadList extends React.Component<
       itemHeight = DOMUtils.getWorkspaceCssNumberProperty('thread-list-item-height-narrow', 85);
     }
 
+    const listProps = {
+      footer: this._getFooter(),
+      draggable: true,
+      columns,
+      itemPropsProvider: this._threadPropsProvider,
+      itemHeight,
+      className: `thread-list thread-list-${this.state.style}`,
+      scrollTooltipComponent: ThreadListScrollTooltip,
+      EmptyComponent: EmptyListState,
+      keymapHandlers: {
+        'thread-list:select-read': this._onSelectRead,
+        'thread-list:select-unread': this._onSelectUnread,
+        'thread-list:select-starred': this._onSelectStarred,
+        'thread-list:select-unstarred': this._onSelectUnstarred,
+        'thread-list:mark-all-as-read': this._onMarkAllAsRead,
+      },
+      onDoubleClick: (thread: Thread) => Actions.popoutThread(thread),
+      onDragItems: this._onDragItems,
+      onDragEnd: this._onDragEnd,
+    };
+
     return (
       <FluxContainer
         stores={[ThreadListStore]}
@@ -109,36 +151,8 @@ class ThreadList extends React.Component<
           };
         }}
       >
-        <FocusContainer collection="thread">
-          {this.state.missingSizes && (
-            <div className="thread-list-banner" role="alert">
-              <span>{localized('Some messages are missing size info. Download sizes to sort accurately.')}</span>
-              <button className="btn btn-primary" onClick={this._fetchMissingSizes}>
-                {localized('Download sizes')}
-              </button>
-            </div>
-          )}
-          <MultiselectList
-            ref="list"
-            footer={this._getFooter()}
-            draggable
-            columns={columns}
-            itemPropsProvider={this._threadPropsProvider}
-            itemHeight={itemHeight}
-            className={`thread-list thread-list-${this.state.style}`}
-            scrollTooltipComponent={ThreadListScrollTooltip}
-            EmptyComponent={EmptyListState}
-            keymapHandlers={{
-              'thread-list:select-read': this._onSelectRead,
-              'thread-list:select-unread': this._onSelectUnread,
-              'thread-list:select-starred': this._onSelectStarred,
-              'thread-list:select-unstarred': this._onSelectUnstarred,
-              'thread-list:mark-all-as-read': this._onMarkAllAsRead,
-            }}
-            onDoubleClick={thread => Actions.popoutThread(thread)}
-            onDragItems={this._onDragItems}
-            onDragEnd={this._onDragEnd}
-          />
+        <FocusContainer collection="thread" {...listProps}>
+          <ThreadListContent ref={this.listRef} onFetchMissingSizes={this._fetchMissingSizes} />
         </FocusContainer>
       </FluxContainer>
     );
@@ -228,7 +242,11 @@ class ThreadList extends React.Component<
   };
 
   _onShowContextMenu = event => {
-    const items = this.refs.list.itemsForMouseEvent(event);
+    const list = this.listRef.current;
+    if (!list) {
+      return;
+    }
+    const items = list.itemsForMouseEvent(event);
     if (!items || items.length === 0) {
       event.preventDefault();
       return;
@@ -287,25 +305,41 @@ class ThreadList extends React.Component<
   _onSelectRead = () => {
     const dataSource = ThreadListStore.dataSource();
     const items = dataSource.itemsCurrentlyInViewMatching(item => !item.unread);
-    this.refs.list.handler().onSelect(items);
+    const list = this.listRef.current;
+    if (!list) {
+      return;
+    }
+    list.handler().onSelect(items);
   };
 
   _onSelectUnread = () => {
     const dataSource = ThreadListStore.dataSource();
     const items = dataSource.itemsCurrentlyInViewMatching(item => item.unread);
-    this.refs.list.handler().onSelect(items);
+    const list = this.listRef.current;
+    if (!list) {
+      return;
+    }
+    list.handler().onSelect(items);
   };
 
   _onSelectStarred = () => {
     const dataSource = ThreadListStore.dataSource();
     const items = dataSource.itemsCurrentlyInViewMatching(item => item.starred);
-    this.refs.list.handler().onSelect(items);
+    const list = this.listRef.current;
+    if (!list) {
+      return;
+    }
+    list.handler().onSelect(items);
   };
 
   _onSelectUnstarred = () => {
     const dataSource = ThreadListStore.dataSource();
     const items = dataSource.itemsCurrentlyInViewMatching(item => !item.starred);
-    this.refs.list.handler().onSelect(items);
+    const list = this.listRef.current;
+    if (!list) {
+      return;
+    }
+    list.handler().onSelect(items);
   };
 
   _onMarkAllAsRead = () => {

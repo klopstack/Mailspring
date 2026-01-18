@@ -80,8 +80,20 @@ for cmd in "$@"; do
     build)
       echo "Running build as 'builder' (UID $(id -u builder))"
       sudo -E -H -u builder HOME=/home/builder PATH="$PATH" bash -lc "mailsync/build.sh && npm ci && npm run build"
+      echo "Build finished. Artifacts:"
+      echo " - mailsync binary: /workspace/mailsync/mailsync"
+      echo " - frontend and packages: /workspace/app/dist"
+      ;;
+    build-mailsync)
+      echo "Building mailsync binary..."
+      sudo -E -H -u builder HOME=/home/builder PATH="$PATH" bash -lc "mailsync/build.sh"
+      echo "Build finished. Artifact is at /workspace/mailsync/mailsync"
+      ;;
+    build-packages)
+      echo "Building frontend and packages..."  
+      sudo -E -H -u builder HOME=/home/builder PATH="$PATH" bash -lc "npm ci && npm run build"
 
-      echo "Build finished. Artifacts (if any) are in /workspace/app/dist"
+      echo "Build finished. Artifacts are in /workspace/app/dist"
       ls -lh /workspace/app/dist || true
       ;;
       

@@ -389,6 +389,7 @@ class CategoryMailboxPerspective extends MailboxPerspective {
 
     if (orderBy) {
       let order: SortOrder;
+      let orders: SortOrder[] | null = null;
 
       switch (orderBy) {
         case '2':
@@ -404,10 +405,49 @@ class CategoryMailboxPerspective extends MailboxPerspective {
           break;
 
         case '4':
+          orders = [
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromName, Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) ASC"
+            ),
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) ASC"
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
         case '5':
+          orders = [
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromName, Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) DESC"
+            ),
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) DESC"
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
         case '6':
+          orders = [
+            SortOrder.raw(
+              '(SELECT MAX(Message.size) FROM Message WHERE Message.threadId = Thread.id) ASC'
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
         case '7':
-          order = Thread.attributes.lastMessageReceivedTimestamp.descending();
+          orders = [
+            SortOrder.raw(
+              '(SELECT MAX(Message.size) FROM Message WHERE Message.threadId = Thread.id) DESC'
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
           break;
 
         default:
@@ -415,7 +455,11 @@ class CategoryMailboxPerspective extends MailboxPerspective {
           break;
       }
 
-      query.order(order);
+      if (orders) {
+        query.order(orders);
+      } else if (order) {
+        query.order(order);
+      }
     } else if (this.isSent()) {
       query.order(Thread.attributes.lastMessageSentTimestamp.descending());
     }

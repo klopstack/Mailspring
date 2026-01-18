@@ -421,9 +421,14 @@ export default class ModelQuery<T extends Model | Model[]> {
         joinAttribute.joinQueryableBy.includes(m.attr.modelKey) ||
         m.attr.modelKey === 'id'
     );
-    const allOrdersOnJoinTable = this._orders.every(o =>
-      joinAttribute.joinQueryableBy.includes(o.attr.modelKey)
-    );
+    const allOrdersOnJoinTable = this._orders.every(o => {
+      if (!o.attr) {
+        return false;
+      }
+      return (
+        joinAttribute.joinQueryableBy.includes(o.attr.modelKey) || o.attr.modelKey === 'id'
+      );
+    });
 
     return allMatchersOnJoinTable && allOrdersOnJoinTable;
   }

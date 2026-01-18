@@ -178,6 +178,12 @@ export class QuerySubscription<T extends Model> {
     if (!old || !updated) return true;
 
     for (const descriptor of this._query.orderSortDescriptors()) {
+      // Raw SQL sort orders may not have an attribute to compare against. In that
+      // case, consider the order potentially impacted so we refetch without
+      // crashing.
+      if (!descriptor.attr || !descriptor.attr.modelKey) {
+        return true;
+      }
       const oldSortValue = old[descriptor.attr.modelKey];
       const updatedSortValue = updated[descriptor.attr.modelKey];
 

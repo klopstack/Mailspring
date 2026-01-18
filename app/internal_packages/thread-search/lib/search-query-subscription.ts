@@ -7,7 +7,7 @@ import {
   ComponentRegistry,
   MutableQuerySubscription,
 } from 'mailspring-exports';
-import { SortOrder } from 'src/flux/attributes';
+import { SortOrder } from '../../../src/flux/attributes';
 
 class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
   _searchQuery: string;
@@ -24,8 +24,15 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
     _.defer(() => this.performSearch());
   }
 
-  replaceRange = () => {
-    // TODO
+  replaceRange = ({ start, end }) => {
+    // Keep a wider cached window around the viewport to avoid thrashing when
+    // scrolling back and forth through search results.
+    const paddedStart = Math.max(0, start - 300);
+    const paddedEnd = end + 300;
+    const next = this.query()?.clone()?.page(paddedStart, paddedEnd, 100, 300);
+    if (next && !next.range().isEqual(this.query().range())) {
+      this.replaceQuery(next);
+    }
   };
 
   performSearch() {
@@ -48,7 +55,18 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
       dbQuery = dbQuery.search(this._searchQuery);
     }
 
+    const { order, orders } = this._orderingForThreads();
+
+    dbQuery = dbQuery.background();
+    dbQuery = orders ? dbQuery.order(orders) : dbQuery.order(order);
+    dbQuery = dbQuery.limit(0);
+
+    this.replaceQuery(dbQuery);
+  }
+
+  _orderingForThreads(): { order: SortOrder; orders: SortOrder[] | null } {
     let order = Thread.attributes.lastMessageReceivedTimestamp.descending();
+    let orders: SortOrder[] | null = null;
 
     const orderBy: string | undefined = AppEnv.config.get('core.lastUsedOrder');
     if (orderBy) {
@@ -66,20 +84,58 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
           break;
 
         case '4':
+          orders = [
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromName, Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) ASC"
+            ),
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) ASC"
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
         case '5':
+          orders = [
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromName, Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) DESC"
+            ),
+            SortOrder.raw(
+              "(SELECT LOWER(COALESCE(Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) DESC"
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
         case '6':
+          orders = [
+            SortOrder.raw(
+              '(SELECT MAX(Message.size) FROM Message WHERE Message.threadId = Thread.id) ASC'
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
         case '7':
+          orders = [
+            SortOrder.raw(
+              '(SELECT MAX(Message.size) FROM Message WHERE Message.threadId = Thread.id) DESC'
+            ),
+            Thread.attributes.lastMessageReceivedTimestamp.descending(),
+            Thread.attributes.id.ascending(),
+          ];
+          break;
+
+        default:
           order = Thread.attributes.lastMessageReceivedTimestamp.descending();
           break;
       }
     }
 
-    dbQuery = dbQuery
-      .background()
-      .order(order)
-      .limit(1000);
-
-    this.replaceQuery(dbQuery);
+    return { order, orders };
   }
 
   _createResultAndTrigger() {
@@ -97,9 +153,10 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
       const currentResultIds = this._set.ids();
       searchIds = _.uniq(currentResultIds.concat(ids));
     }
-    const dbQuery = DatabaseStore.findAll<Thread>(Thread)
-      .where({ id: searchIds })
-      .order(Thread.attributes.lastMessageReceivedTimestamp.descending());
+    const { order, orders } = this._orderingForThreads();
+
+    let dbQuery = DatabaseStore.findAll<Thread>(Thread).where({ id: searchIds });
+    dbQuery = orders ? dbQuery.order(orders) : dbQuery.order(order);
     this.replaceQuery(dbQuery);
   }
 

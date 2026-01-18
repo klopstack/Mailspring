@@ -29,7 +29,8 @@ function InjectsToolbarButtons(
 
     render() {
       const { items } = this.props;
-      const { selection } = ThreadListStore.dataSource();
+      const ds = ThreadListStore.dataSource();
+      const selection = ds && (ds as any).selection ? (ds as any).selection : null;
 
       // Keep all of the exposed props from deprecated regions that now map to this one
       const exposedProps = {

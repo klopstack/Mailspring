@@ -41,6 +41,11 @@ const sizeValue = (thread: any) => {
 const sortThreads = (threads: any[], orderBy?: string) => {
   if (!orderBy) return threads;
 
+  // Server-side ordering now handles sender/size; keep wire order intact.
+  if (['4', '5', '6', '7'].includes(orderBy)) {
+    return threads;
+  }
+
   const apply = (comparator: (a: any, b: any) => number) => {
     return threads.slice().sort((a, b) => {
       const result = comparator(a, b);
