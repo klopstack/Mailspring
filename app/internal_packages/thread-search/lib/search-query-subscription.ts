@@ -86,11 +86,9 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
         case '4':
           orders = [
             SortOrder.raw(
-              "(SELECT LOWER(COALESCE(Message.fromName, Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) ASC"
+              "LOWER(COALESCE(Thread.lastMessageFromName, Thread.lastMessageFromEmail, '')) ASC"
             ),
-            SortOrder.raw(
-              "(SELECT LOWER(COALESCE(Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) ASC"
-            ),
+            SortOrder.raw("LOWER(COALESCE(Thread.lastMessageFromEmail, '')) ASC"),
             Thread.attributes.lastMessageReceivedTimestamp.descending(),
             Thread.attributes.id.ascending(),
           ];
@@ -99,11 +97,9 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
         case '5':
           orders = [
             SortOrder.raw(
-              "(SELECT LOWER(COALESCE(Message.fromName, Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) DESC"
+              "LOWER(COALESCE(Thread.lastMessageFromName, Thread.lastMessageFromEmail, '')) DESC"
             ),
-            SortOrder.raw(
-              "(SELECT LOWER(COALESCE(Message.fromEmail, '')) FROM Message WHERE Message.threadId = Thread.id ORDER BY Message.date DESC, Message.id DESC LIMIT 1) DESC"
-            ),
+            SortOrder.raw("LOWER(COALESCE(Thread.lastMessageFromEmail, '')) DESC"),
             Thread.attributes.lastMessageReceivedTimestamp.descending(),
             Thread.attributes.id.ascending(),
           ];
@@ -111,9 +107,7 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
 
         case '6':
           orders = [
-            SortOrder.raw(
-              '(SELECT MAX(Message.size) FROM Message WHERE Message.threadId = Thread.id) ASC'
-            ),
+            Thread.attributes.messageSizeTotal.ascending(),
             Thread.attributes.lastMessageReceivedTimestamp.descending(),
             Thread.attributes.id.ascending(),
           ];
@@ -121,9 +115,7 @@ class SearchQuerySubscription extends MutableQuerySubscription<Thread> {
 
         case '7':
           orders = [
-            SortOrder.raw(
-              '(SELECT MAX(Message.size) FROM Message WHERE Message.threadId = Thread.id) DESC'
-            ),
+            Thread.attributes.messageSizeTotal.descending(),
             Thread.attributes.lastMessageReceivedTimestamp.descending(),
             Thread.attributes.id.ascending(),
           ];

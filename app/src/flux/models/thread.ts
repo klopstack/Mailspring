@@ -124,6 +124,21 @@ export class Thread extends ModelWithMetadata {
       modelKey: 'lastMessageSentTimestamp',
     }),
 
+    lastMessageFromEmail: Attributes.String({
+      queryable: true,
+      modelKey: 'lastMessageFromEmail',
+    }),
+
+    lastMessageFromName: Attributes.String({
+      queryable: true,
+      modelKey: 'lastMessageFromName',
+    }),
+
+    messageSizeTotal: Attributes.Number({
+      queryable: true,
+      modelKey: 'messageSizeTotal',
+    }),
+
     inAllMail: Attributes.Boolean({
       queryable: true,
       modelKey: 'inAllMail',
@@ -150,6 +165,9 @@ export class Thread extends ModelWithMetadata {
   public firstMessageTimestamp: Date;
   public lastMessageReceivedTimestamp: Date;
   public lastMessageSentTimestamp: Date;
+  public lastMessageFromEmail: string;
+  public lastMessageFromName: string;
+  public messageSizeTotal: number;
   public inAllMail: boolean;
 
   async messages({ includeHidden }: { includeHidden?: boolean } = {}) {
