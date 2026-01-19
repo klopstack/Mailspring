@@ -14,15 +14,20 @@ import ThreadListDataSource from './thread-list-data-source';
 
 class ThreadListStore extends MailspringStore {
   _dataSource?: ListDataSource;
-  _dataSourceUnlisten: () => void;
+  _dataSourceUnlisten: (() => void) | null;
   _hasMissingSizes: boolean = false;
 
   constructor() {
     super();
+    // Respect the existing grouping preference, defaulting to threads when unset.
+    if (!AppEnv.config.get('core.threadGrouping')) {
+      AppEnv.config.set('core.threadGrouping', 'thread');
+    }
     this.listenTo(FocusedPerspectiveStore, this._onPerspectiveChanged);
     this.createListDataSource();
 
     AppEnv.config.observe('core.lastUsedOrder', () => this.createListDataSource());
+    AppEnv.config.observe('core.threadGrouping', () => this.createListDataSource());
   }
 
   dataSource = () => {
@@ -40,18 +45,20 @@ class ThreadListStore extends MailspringStore {
     if (typeof this._dataSourceUnlisten === 'function') {
       this._dataSourceUnlisten();
     }
-
-    if (this._dataSource) {
-      this._dataSource.cleanup();
-      this._dataSource = null;
-    }
+    const previousDataSource = this._dataSource;
+    this._dataSourceUnlisten = null;
 
     const threadsSubscription = FocusedPerspectiveStore.current().threads();
     if (threadsSubscription) {
-      this._dataSource = new ThreadListDataSource(threadsSubscription);
+      const grouping = (AppEnv.config.get('core.threadGrouping') as string) || 'thread';
+      this._dataSource = new ThreadListDataSource(threadsSubscription, grouping as any);
       this._dataSourceUnlisten = this._dataSource.listen(this._onDataChanged, this);
     } else {
       this._dataSource = new ListTabular.DataSource.Empty();
+    }
+
+    if (previousDataSource) {
+      previousDataSource.cleanup();
     }
 
     this.trigger(this);

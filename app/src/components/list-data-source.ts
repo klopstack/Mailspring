@@ -31,9 +31,11 @@ export class ListDataSource {
       throw new Error('ListDataSource: You must pass a function to `listen`');
     }
     if (this._cleanedup === true) {
-      throw new Error(
-        'ListDataSource: You cannot listen again after removing the last listener. This is an implementation detail.'
+      // Gracefully no-op if callers reattach after cleanup to avoid crashing when data sources swap.
+      console.warn(
+        'ListDataSource: listen() called after cleanup; ignoring attachment on disposed data source.'
       );
+      return () => {};
     }
 
     const eventHandler = (...args) => {

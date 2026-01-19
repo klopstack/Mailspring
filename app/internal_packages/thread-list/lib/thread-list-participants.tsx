@@ -1,5 +1,5 @@
 import React from 'react';
-import { PropTypes, Utils } from 'mailspring-exports';
+import { PropTypes, Utils, localized } from 'mailspring-exports';
 import { AccountColorBar } from 'mailspring-component-kit';
 import { ThreadWithMessagesMetadata } from './types';
 
@@ -16,11 +16,60 @@ class ThreadListParticipants extends React.Component<{ thread: ThreadWithMessage
   }
 
   render() {
+    if ((this.props.thread as any).__groupType === 'sender') {
+      return this.renderSenderGroup();
+    }
     const items = this.getTokens();
     return (
       <div className="participants" dir="auto">
         <AccountColorBar accountId={this.props.thread.accountId} />
         {this.renderSpans(items)}
+      </div>
+    );
+  }
+
+  renderSenderGroup() {
+    const messages = (this.props.thread as any).__messages || [];
+    const latest = messages[messages.length - 1];
+
+    let email = (latest && latest.from && latest.from[0] && latest.from[0].email) || null;
+    let name = (latest && latest.from && latest.from[0] && latest.from[0].name) || null;
+
+    const names = new Set<string>();
+    if (messages.length > 0 && email) {
+      messages.forEach(m => {
+        const from = (m as any).from || [];
+        from.forEach(f => {
+          if (f.email && Utils.emailIsEquivalent(f.email, email) && f.name) {
+            names.add(f.name);
+          }
+        });
+      });
+    }
+
+    let display = null;
+    if (email && names.size > 1) {
+      display = email;
+    } else if (names.size === 1) {
+      display = Array.from(names)[0];
+    } else if (name) {
+      display = name;
+    } else if (email) {
+      display = email;
+    } else if ((this.props.thread as any).senderDisplayName) {
+      display = (this.props.thread as any).senderDisplayName;
+    } else {
+      display = localized('Unknown Sender');
+    }
+
+    const count = (this.props.thread as any).__groupMessageCount || messages.length || 0;
+    return (
+      <div className="participants" dir="auto">
+        <AccountColorBar accountId={this.props.thread.accountId} />
+        <span className="unread-false">
+          {display}
+          {count > 0 ? ` (${count})` : ''}
+        </span>
       </div>
     );
   }

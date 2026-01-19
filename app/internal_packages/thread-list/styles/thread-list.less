@@ -178,9 +178,38 @@ input:focus {
     text-align: left;
     overflow: hidden;
 
+    .group-caret {
+      display: inline-block;
+      width: 12px;
+      color: @text-color-very-subtle;
+      text-align: center;
+      margin-right: 4px;
+    }
+
     &.no-recipients {
       color: @text-color-very-subtle;
     }
+  }
+
+  .group-toggle-icon,
+  .caret-placeholder {
+    display: inline-block;
+    width: 16px;
+    color: @text-color-very-subtle;
+    text-align: center;
+    margin-right: 4px;
+    user-select: none;
+  }
+
+  .group-toggle-icon {
+    cursor: pointer;
+    opacity: 0.65;
+    transition: opacity 120ms ease;
+  }
+
+  .list-item:hover .group-toggle-icon,
+  .group-toggle-icon.expanded {
+    opacity: 1;
   }
 
   .details {
@@ -312,6 +341,21 @@ input:focus {
         cursor: pointer;
         color: rgb(239, 209, 0);
       }
+    }
+  }
+
+  .list-item.group-child {
+    background: @background-primary;
+
+    .list-column-Participants .participants {
+      padding-left: 14px;
+      position: relative;
+    }
+  }
+
+  .list-item.group-parent {
+    .participants {
+      font-weight: @font-weight-semi-bold;
     }
   }
 }

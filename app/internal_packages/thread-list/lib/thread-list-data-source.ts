@@ -6,7 +6,9 @@ import {
   Message,
   QueryResultSet,
   QuerySubscription,
+  localized,
 } from 'mailspring-exports';
+import { SenderGroup, ThreadWithMessagesMetadata } from './types';
 
 const latestMessage = (messages: Message[] = []) => {
   if (!messages || messages.length === 0) return null;
@@ -79,16 +81,126 @@ const _observableForThreadMessages = (id, initialModels) => {
   return Rx.Observable.fromNamedQuerySubscription(`message-${id}`, subscription);
 };
 
-const _flatMapJoiningMessages = $threadsResultSet => {
-  // DatabaseView leverages `QuerySubscription` for threads /and/ for the
-  // messages on each thread, which are passed to out as `thread.__messages`.
-  let $messagesResultSets = {};
+const _keyForSender = (thread: ThreadWithMessagesMetadata) => {
+  const newest = latestMessage(thread.__messages);
+  const contactFallback = newest && newest.from && newest.from[0];
+  const email =
+    (newest && newest.fromEmail) || (contactFallback && contactFallback.email) || 'unknown';
+  const name =
+    (newest && newest.fromName) || (contactFallback && contactFallback.name) || email || 'unknown';
+  const key = (email || name).toLowerCase();
+  return { key, email, name };
+};
 
-  // 2. when we receive a set of threads, we check to see if we have message
-  //    observables for each thread. If threads have been added to the result set,
-  //    we make a single database query and load /all/ the message metadata for
-  //    the new threads at once. (This is a performance optimization -it's about
-  //    ~80msec faster than making 100 queries for 100 new thread ids separately.)
+const _buildSenderGroups = (threads: ThreadWithMessagesMetadata[]) => {
+  const groups = new Map<string, {
+    threads: ThreadWithMessagesMetadata[];
+    messages: Message[];
+    displayName: string;
+  }>();
+
+  threads.forEach(thread => {
+    const { key, name } = _keyForSender(thread);
+    const normalizedKey = key || `unknown-${thread.id}`;
+    const existing = groups.get(normalizedKey) || {
+      threads: [],
+      messages: [],
+      displayName: name || localized('Unknown Sender'),
+    };
+    existing.threads.push(thread);
+    existing.messages.push(...(thread.__messages || []));
+    existing.displayName = existing.displayName || name || localized('Unknown Sender');
+    groups.set(normalizedKey, existing);
+  });
+
+  const groupedModels: { [id: string]: SenderGroup } = {};
+  const groupedIds: string[] = [];
+
+  const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
+    const countDiff = b[1].messages.length - a[1].messages.length;
+    if (countDiff !== 0) return countDiff;
+    const nameA = a[1].displayName.toLowerCase();
+    const nameB = b[1].displayName.toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  sortedGroups.forEach(([key, entry]) => {
+    const base = entry.threads[0];
+    const group = new Thread(base) as SenderGroup;
+    group.id = base.id;
+    group.__groupType = 'sender';
+    group.__groupThreads = entry.threads;
+    group.__groupMessageCount = entry.messages.length;
+    group.senderDisplayName = entry.displayName;
+    group.senderKey = key;
+
+    const sortedMessages = entry.messages
+      .slice()
+      .sort((a, b) => {
+        const aTs = a.date ? new Date(a.date).getTime() : 0;
+        const bTs = b.date ? new Date(b.date).getTime() : 0;
+        return aTs - bTs;
+      });
+
+    group.__messages = sortedMessages;
+    const latest = sortedMessages.length ? sortedMessages[sortedMessages.length - 1] : null;
+    group.snippet = (latest && latest.snippet) || base.snippet;
+    group.subject = `${localized('Messages from')} ${entry.displayName}`;
+    group.unread = entry.threads.some(t => t.unread);
+    group.starred = entry.threads.some(t => t.starred);
+    group.attachmentCount = entry.threads.reduce((sum, t) => sum + (t.attachmentCount || 0), 0);
+
+    if (latest && latest.date) {
+      group.lastMessageReceivedTimestamp = new Date(latest.date) as any;
+    } else {
+      group.lastMessageReceivedTimestamp = base.lastMessageReceivedTimestamp;
+    }
+
+    groupedModels[group.id] = group;
+    groupedIds.push(group.id);
+  });
+
+  return { ids: groupedIds, models: groupedModels };
+};
+
+const _flatMapJoiningMessages = ($threadsResultSet, grouping: 'thread' | 'sender') => {
+  // Sender grouping used to combineLatest one observable per thread, which explodes
+  // when you load large result sets. Instead, fetch message metadata in one query
+  // per emitted thread set when grouping by sender, and keep the original reactive
+  // per-thread observables for thread grouping.
+
+  if (grouping === 'sender') {
+    return $threadsResultSet.flatMapLatest(threadsResultSet => {
+      const ids = threadsResultSet.ids();
+      const promise = DatabaseStore.findAll<Message>(Message, { threadId: ids }).then(
+        messages => {
+          const messagesByThread = messages.reduce((acc, msg) => {
+            if (!acc[msg.threadId]) acc[msg.threadId] = [];
+            acc[msg.threadId].push(msg);
+            return acc;
+          }, {} as Record<string, Message[]>);
+
+          const threadsWithMessages = {} as Record<string, ThreadWithMessagesMetadata>;
+          threadsResultSet.models().forEach(thread => {
+            const clone = new Thread(thread) as any;
+            clone.__messages = (messagesByThread[thread.id] || []).filter(m => !m.isHidden());
+            threadsWithMessages[clone.id] = clone;
+          });
+
+          const { ids: groupedIds, models } = _buildSenderGroups(Object.values(threadsWithMessages));
+          const groupedSet = threadsResultSet.clone() as any;
+          groupedSet._ids = groupedIds;
+          groupedSet._idToIndexHash = null;
+          return QueryResultSet.setByApplyingModels(groupedSet, models);
+        }
+      );
+
+      return Rx.Observable.fromPromise(promise);
+    });
+  }
+
+  // Default thread grouping keeps the reactive per-thread message observables.
+  let $messagesResultSets = {};
   return (
     $threadsResultSet
       .flatMapLatest(threadsResultSet => {
@@ -105,10 +217,6 @@ const _flatMapJoiningMessages = $threadsResultSet => {
         }
         return Rx.Observable.fromPromise(promise);
       })
-      // 3. when that finishes, we group the loaded messsages by threadId and create
-      //    the missing observables. Creating a query subscription would normally load
-      //    an initial result set. To avoid that, we just hand new subscriptions the
-      //    results we loaded in #2.
       .flatMapLatest(([threadsResultSet, messagesForNewThreads]) => {
         const messagesGrouped = {};
         for (const message of messagesForNewThreads) {
@@ -128,9 +236,6 @@ const _flatMapJoiningMessages = $threadsResultSet => {
         });
         sets.unshift(Rx.Observable.from([threadsResultSet]));
 
-        // 4. We use `combineLatest` to merge the message observables into a single
-        //    stream (like Promise.all).  When /any/ of them emit a new result set, we
-        //    trigger.
         return Rx.Observable.combineLatest(sets);
       })
       .flatMapLatest(([threadsResultSet, ...messagesResultSets]) => {
@@ -159,14 +264,117 @@ const _flatMapJoiningMessages = $threadsResultSet => {
 };
 
 class ThreadListDataSource extends ObservableListDataSource {
-  constructor(subscription) {
-    let $resultSetObservable = Rx.Observable.fromNamedQuerySubscription(
-      'thread-list',
-      subscription
+  _expandedGroups = new Set<string>();
+  _groupingMode: 'thread' | 'sender';
+  _rawResultSet: QueryResultSet<Thread> | null = null;
+  _subject: Rx.Subject<QueryResultSet<Thread>>;
+  _upstreamDispose?: Rx.Disposable;
+  _startUpstream: () => void;
+
+  constructor(subscription, grouping: 'thread' | 'sender') {
+    const groupingMode: 'thread' | 'sender' = grouping === 'sender' ? 'sender' : 'thread';
+    const $resultSetObservable = _flatMapJoiningMessages(
+      Rx.Observable.fromNamedQuerySubscription('thread-list', subscription),
+      groupingMode
     );
-    $resultSetObservable = _flatMapJoiningMessages($resultSetObservable);
-    super($resultSetObservable, subscription.replaceRange.bind(subscription));
+
+    const subject = new Rx.Subject<QueryResultSet<Thread>>();
+
+    const startUpstream = () => {
+      if (this._upstreamDispose) return;
+      this._upstreamDispose = $resultSetObservable.subscribe(rs => {
+        this._rawResultSet = rs;
+        subject.onNext(this._applyExpansion(rs));
+      });
+    };
+
+    const replaceRange = groupingMode === 'sender'
+      ? () => {
+          subscription.replaceRange({ start: 0, end: 10000 });
+          startUpstream();
+        }
+      : (range: { start: number; end: number }) => {
+          subscription.replaceRange(range);
+          startUpstream();
+        };
+
+    super(subject, replaceRange);
+
+    this._subject = subject;
+    this._groupingMode = groupingMode;
+    this._startUpstream = startUpstream;
+
+    if (groupingMode === 'sender') {
+      // Proactively request a wide window so grouping has complete data.
+      subscription.replaceRange({ start: 0, end: 10000 });
+      startUpstream();
+    }
   }
+
+  cleanup() {
+    if (this._upstreamDispose) {
+      this._upstreamDispose.dispose();
+      this._upstreamDispose = null;
+    }
+    return super.cleanup();
+  }
+
+  groupingMode() {
+    return this._groupingMode;
+  }
+
+  setExpandedGroups(ids: Set<string>) {
+    if (this._groupingMode !== 'sender') return;
+    this._expandedGroups = new Set(ids);
+    if (this._rawResultSet) {
+      this._subject.onNext(this._applyExpansion(this._rawResultSet));
+    }
+  }
+
+  _applyExpansion = (resultSet: QueryResultSet<Thread>) => {
+    if (this._groupingMode !== 'sender') return resultSet;
+
+    const modelsHash = Object.assign({}, (resultSet as any)._modelsHash);
+    const idsOut: string[] = [];
+
+    resultSet.ids().forEach(id => {
+      const model = resultSet.modelWithId(id) as SenderGroup;
+      if (!model) return;
+
+      // Always include the parent row
+      const groupClone = new Thread(model) as SenderGroup;
+      groupClone.__messages = (model as any).__messages;
+      groupClone.__groupThreads = (model as any).__groupThreads;
+      groupClone.__groupType = (model as any).__groupType;
+      groupClone.__groupMessageCount = (model as any).__groupMessageCount;
+      groupClone.senderDisplayName = (model as any).senderDisplayName;
+      groupClone.senderKey = (model as any).senderKey;
+      groupClone.__groupExpanded = this._expandedGroups.has(id);
+
+      modelsHash[id] = groupClone as any;
+      idsOut.push(id);
+
+      if (
+        groupClone.__groupExpanded &&
+        groupClone.__groupThreads &&
+        groupClone.__groupThreads.length > 0
+      ) {
+        groupClone.__groupThreads.forEach(child => {
+          if (!child || child.id === id) return;
+          const childClone = new Thread(child) as ThreadWithMessagesMetadata;
+          (childClone as any).__messages = (child as any).__messages;
+          (childClone as any).__groupChildOf = id;
+          modelsHash[childClone.id] = childClone as any;
+          idsOut.push(childClone.id);
+        });
+      }
+    });
+
+    const flattened = resultSet.clone() as any;
+    flattened._ids = idsOut;
+    flattened._idToIndexHash = null;
+    return QueryResultSet.setByApplyingModels(flattened, modelsHash);
+  };
 }
 
 export default ThreadListDataSource;

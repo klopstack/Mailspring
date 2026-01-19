@@ -27,6 +27,7 @@ import {
   getContactSuggestions,
   getThreadSuggestions,
   wrapInQuotes,
+  ReceivedPresetSuggestion,
 } from './search-bar-util';
 
 interface ThreadSearchBarProps {
@@ -48,6 +49,8 @@ interface ThreadSearchBarState {
   };
   selectedIdx: number;
   lastSortBy: string;
+  lastGrouping: 'thread' | 'sender';
+  showControls: boolean;
 }
 
 class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarState> {
@@ -69,12 +72,17 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
       selected: null,
       selectedIdx: -1,
       lastSortBy: AppEnv.config.get('core.lastUsedOrder') || '0',
+      lastGrouping: (AppEnv.config.get('core.threadGrouping') as any) || 'thread',
+      showControls: false,
     };
   }
 
   componentDidUpdate(prevProps: ThreadSearchBarProps) {
     if (prevProps.query !== this.props.query) {
       this._generateSuggestionsForQuery(this.props.query);
+    }
+    if (prevProps.perspective !== this.props.perspective) {
+      this._collapseControlsToDefaults();
     }
   }
 
@@ -148,7 +156,7 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
       }
     } else if (query.length === 0) {
       // show all token autocompletion options before the user starts typing
-      suggestions = TokenSuggestionsForEmpty;
+      suggestions = [...TokenSuggestionsForEmpty, ReceivedPresetSuggestion];
     } else if (query.length > 2 && TokenAndTermRegexp().test(query.trim()) === false) {
       // show thread and contact suggestions ala Gmail
       suggestions = [];
@@ -329,7 +337,7 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
 
   render() {
     const { query, isSearching, perspective } = this.props;
-    const { suggestions, selectedIdx } = this.state;
+    const { suggestions, selectedIdx, lastGrouping, showControls } = this.state;
 
     const showPlaceholder = !this.state.focused && !query;
     const showX = this.state.focused || !!(perspective as any).searchQuery;
@@ -342,6 +350,11 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
       { id: '5', name: `${localized('Sender')} (${localized('DESC')})` },
       { id: '6', name: `${localized('Size')} (${localized('ASC')})` },
       { id: '7', name: `${localized('Size')} (${localized('DESC')})` },
+    ];
+
+    const groupingOptions = [
+      { id: 'thread', name: localized('Group: Thread') },
+      { id: 'sender', name: localized('Group: Sender') },
     ];
 
     return (
@@ -405,7 +418,7 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
                   {s.description}
                 </div>
               ))}
-              {suggestions === TokenSuggestionsForEmpty && (
+              {(this.props.query || '').trim().length === 0 && (
                 <div className="footer">
                   {localized(
                     'Pro tip: Combine search terms with AND and OR to create complex queries.'
@@ -426,17 +439,46 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
             </div>
           )}
         </KeyCommandsRegion>
-        <DropdownMenu
-          className="thread-search-sort"
-          attachment={DropdownMenu.Attachment.RightEdge}
-          items={list}
-          intitialSelectionItem={list.filter(x => x.id === (this.state.lastSortBy || '1'))[0]}
-          defaultSelectedIndex={Number.parseInt(this.state.lastSortBy) || -1}
-          itemKey={item => item.id}
-          itemContent={item => item.name}
-          onSelect={this._onSortSelect}
-          style={{ order: 100 }}
-        />
+        <button
+          className="btn btn-toolbar sort-toggle"
+          style={{ order: 0, marginLeft: 6, minWidth: 24 }}
+          onClick={() => {
+            if (showControls) {
+              this._collapseControlsToDefaults();
+            } else {
+              this.setState({ showControls: true });
+            }
+          }}
+          aria-label={localized('Toggle grouping and sorting')}
+        >
+          {showControls ? '▷' : '◁'}
+        </button>
+        {showControls && (
+          <React.Fragment>
+            <DropdownMenu
+              className="thread-search-sort"
+              attachment={DropdownMenu.Attachment.RightEdge}
+              items={groupingOptions}
+              intitialSelectionItem={groupingOptions.filter(x => x.id === lastGrouping)[0]}
+              defaultSelectedIndex={Math.max(0, groupingOptions.findIndex(x => x.id === lastGrouping))}
+              itemKey={item => item.id}
+              itemContent={item => item.name}
+              onSelect={this._onGroupingSelect}
+              style={{ order: 75 }}
+            />
+            <DropdownMenu
+              className="thread-search-sort"
+              attachment={DropdownMenu.Attachment.RightEdge}
+              items={list}
+              intitialSelectionItem={list.filter(x => x.id === (this.state.lastSortBy || '1'))[0]}
+              defaultSelectedIndex={Number.parseInt(this.state.lastSortBy) || -1}
+              itemKey={item => item.id}
+              itemContent={item => item.name}
+              onSelect={this._onSortSelect}
+              style={{ order: 85 }}
+            />
+          </React.Fragment>
+        )}
       </Flexbox>
     );
   }
@@ -445,6 +487,21 @@ class ThreadSearchBar extends Component<ThreadSearchBarProps, ThreadSearchBarSta
     this.setState({ lastSortBy: item.id });
     AppEnv.config.set('core.lastUsedOrder', item.id);
   };
+
+  private _onGroupingSelect = (item: any) => {
+    this.setState({ lastGrouping: item.id });
+    AppEnv.config.set('core.threadGrouping', item.id);
+  };
+
+  private _collapseControlsToDefaults() {
+    this.setState({
+      showControls: false,
+      lastGrouping: 'thread',
+      lastSortBy: '1',
+    });
+    AppEnv.config.set('core.threadGrouping', 'thread');
+    AppEnv.config.set('core.lastUsedOrder', '1');
+  }
 }
 
 export default ListensToFluxStore(ThreadSearchBar, {

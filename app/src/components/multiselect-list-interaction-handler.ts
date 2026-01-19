@@ -35,6 +35,14 @@ export default class MultiselectListInteractionHandler {
   }
 
   onClick = item => {
+    if (
+      this.props.onSameItemClick &&
+      this.props.focusedId &&
+      this.props.focusedId === item.id
+    ) {
+      const handled = this.props.onSameItemClick(item);
+      if (handled) return;
+    }
     this.onFocusItem(item);
   };
 

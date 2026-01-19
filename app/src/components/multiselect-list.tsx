@@ -26,6 +26,7 @@ export interface MultiselectListProps extends ListTabularProps {
   onDragItems?: (event: React.DragEvent, items: any) => void;
   onSetCursorPosition?: (item: any) => void;
   onComponentDidUpdate?: (...args: any[]) => any;
+  onSameItemClick?: (item: any) => boolean;
 }
 
 type MultiselectListState = {
@@ -58,6 +59,7 @@ export class MultiselectList extends React.Component<MultiselectListProps, Multi
     itemPropsProvider: PropTypes.func.isRequired,
     keymapHandlers: PropTypes.object,
     onComponentDidUpdate: PropTypes.func,
+    onSameItemClick: PropTypes.func,
   };
 
   unsubscribers: (() => void)[];
@@ -155,6 +157,13 @@ export class MultiselectList extends React.Component<MultiselectListProps, Multi
   componentDidUpdate(prevProps: MultiselectListProps, prevState: MultiselectListState) {
     // Note: dataSource/columns changes are now handled by getDerivedStateFromProps
     // before render, so no state updates needed here
+
+    // Keep the interaction handler in sync with the latest props (eg: focusedId).
+    if (this.state.handler) {
+      this.state.handler.props = this.props;
+      this.state.handler.onFocusItem = this.props.onFocusItem;
+      this.state.handler.onSetCursorPosition = this.props.onSetCursorPosition;
+    }
 
     if (this.props.onComponentDidUpdate) {
       this.props.onComponentDidUpdate();

@@ -11,6 +11,7 @@ import {
 import { localized, FocusedPerspectiveStore, Utils, DateUtils } from 'mailspring-exports';
 
 import { ThreadArchiveQuickAction, ThreadTrashQuickAction } from './thread-list-quick-actions';
+import ThreadListGroupToggle from './thread-list-group-toggle';
 import ThreadListParticipants from './thread-list-participants';
 import ThreadListIcon from './thread-list-icon';
 
@@ -59,6 +60,12 @@ const getSnippet = function(thread) {
   }
   return null;
 };
+
+const caret = new ListTabular.Column({
+  name: 'Expand',
+  width: 20,
+  resolver: thread => <ThreadListGroupToggle thread={thread} />,
+});
 
 const c1 = new ListTabular.Column({
   name: '★',
@@ -168,78 +175,85 @@ const c5 = new ListTabular.Column({
   },
 });
 
-const cNarrow = new ListTabular.Column({
-  name: 'Item',
-  flex: 1,
-  resolver: thread => {
-    let pencil: JSX.Element = null;
-    let attachment: JSX.Element = null;
-    const messages = thread.__messages || [];
+const buildNarrowColumn = (includeToggle: boolean) =>
+  new ListTabular.Column({
+    name: 'Item',
+    flex: 1,
+    resolver: thread => {
+      let pencil: JSX.Element = null;
+      let attachment: JSX.Element = null;
+      const messages = thread.__messages || [];
 
-    const hasAttachments =
-      thread.attachmentCount > 0 && messages.find(m => Utils.showIconForAttachments(m.files));
-    if (hasAttachments) {
-      attachment = <div className="thread-icon thread-icon-attachment" />;
-    }
+      const hasAttachments =
+        thread.attachmentCount > 0 && messages.find(m => Utils.showIconForAttachments(m.files));
+      if (hasAttachments) {
+        attachment = <div className="thread-icon thread-icon-attachment" />;
+      }
 
-    const hasDraft = messages.find(m => m.draft);
-    if (hasDraft) {
-      pencil = (
-        <RetinaImg
-          name="icon-draft-pencil.png"
-          className="draft-icon"
-          mode={RetinaImg.Mode.ContentPreserve}
-        />
-      );
-    }
-
-    // TODO We are limiting the amount on injected icons in narrow mode to 1
-    // until we revisit the UI to accommodate more icons
-    return (
-      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-        <div className="icons-column">
-          <ThreadListIcon thread={thread} />
-          <InjectedComponentSet
-            inline={true}
-            matchLimit={1}
-            direction="column"
-            containersRequired={false}
-            key="injected-component-set"
-            exposedProps={{ thread: thread }}
-            matching={{ role: 'ThreadListIcon' }}
-            className="thread-injected-icons"
+      const hasDraft = messages.find(m => m.draft);
+      if (hasDraft) {
+        pencil = (
+          <RetinaImg
+            name="icon-draft-pencil.png"
+            className="draft-icon"
+            mode={RetinaImg.Mode.ContentPreserve}
           />
-          <MailImportantIcon thread={thread} showIfAvailableForAnyAccount={true} />
-        </div>
-        <div className="thread-info-column">
-          <div className="participants-wrapper">
-            <ThreadListParticipants thread={thread} />
-            {pencil}
-            <span style={{ flex: 1 }} />
-            {attachment}
-            <InjectedComponent
-              key="thread-injected-timestamp"
-              className="thread-injected-timestamp"
-              fallback={ThreadListTimestamp}
-              exposedProps={{ thread: thread }}
-              matching={{ role: 'ThreadListTimestamp' }}
-            />
-          </div>
-          <div className="subject" dir="auto">
-            {subject(thread.subject)}
-          </div>
-          <div className="snippet-and-labels">
-            <div className="snippet" dir="auto">
-              {getSnippet(thread)}&nbsp;
-            </div>
-            <div style={{ flex: 1, flexShrink: 1 }} />
-            <MailLabelSet thread={thread} />
-          </div>
-        </div>
-      </div>
-    );
-  },
-});
+        );
+      }
 
-export const Narrow = [cNarrow];
-export const Wide = [c1, c2, c3, c4, c5];
+      // TODO We are limiting the amount on injected icons in narrow mode to 1
+      // until we revisit the UI to accommodate more icons
+      return (
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          <div className="icons-column">
+            {includeToggle ? <ThreadListGroupToggle thread={thread} /> : null}
+            <ThreadListIcon thread={thread} />
+            <InjectedComponentSet
+              inline={true}
+              matchLimit={1}
+              direction="column"
+              containersRequired={false}
+              key="injected-component-set"
+              exposedProps={{ thread: thread }}
+              matching={{ role: 'ThreadListIcon' }}
+              className="thread-injected-icons"
+            />
+            <MailImportantIcon thread={thread} showIfAvailableForAnyAccount={true} />
+          </div>
+          <div className="thread-info-column">
+            <div className="participants-wrapper">
+              <ThreadListParticipants thread={thread} />
+              {pencil}
+              <span style={{ flex: 1 }} />
+              {attachment}
+              <InjectedComponent
+                key="thread-injected-timestamp"
+                className="thread-injected-timestamp"
+                fallback={ThreadListTimestamp}
+                exposedProps={{ thread: thread }}
+                matching={{ role: 'ThreadListTimestamp' }}
+              />
+            </div>
+            <div className="subject" dir="auto">
+              {subject(thread.subject)}
+            </div>
+            <div className="snippet-and-labels">
+              <div className="snippet" dir="auto">
+                {getSnippet(thread)}&nbsp;
+              </div>
+              <div style={{ flex: 1, flexShrink: 1 }} />
+              <MailLabelSet thread={thread} />
+            </div>
+          </div>
+        </div>
+      );
+    },
+  });
+
+const narrowWithToggle = buildNarrowColumn(true);
+const narrowWithoutToggle = buildNarrowColumn(false);
+
+export const Narrow = grouping =>
+  grouping === 'sender' ? [narrowWithToggle] : [narrowWithoutToggle];
+export const Wide = grouping =>
+  grouping === 'sender' ? [caret, c1, c2, c3, c4, c5] : [c1, c2, c3, c4, c5];

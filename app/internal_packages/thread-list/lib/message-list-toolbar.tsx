@@ -5,6 +5,19 @@ import { Rx, FocusedContentStore, Thread } from 'mailspring-exports';
 import ThreadListStore from './thread-list-store';
 import InjectsToolbarButtons, { ToolbarRole } from './injects-toolbar-buttons';
 
+const flattenThreads = (list: any[] = []) => {
+  const out: Thread[] = [];
+  list.forEach(item => {
+    if (!item) return;
+    if (item.__groupThreads) {
+      out.push(...item.__groupThreads);
+    } else {
+      out.push(item);
+    }
+  });
+  return out;
+};
+
 function getObservable() {
   return Rx.Observable.combineLatest(
     Rx.Observable.fromStore(FocusedContentStore),
@@ -15,9 +28,9 @@ function getObservable() {
     })
   ).map(({ focusedThread, items }) => {
     if (focusedThread) {
-      return [focusedThread];
+      return flattenThreads([focusedThread]);
     }
-    return items;
+    return flattenThreads(items);
   });
 }
 

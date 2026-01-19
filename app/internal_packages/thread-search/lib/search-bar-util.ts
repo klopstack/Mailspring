@@ -129,6 +129,13 @@ export const TokenSuggestions = [
 
 export const TokenSuggestionsForEmpty = TokenSuggestions.filter(t => !t.hidden);
 
+export const ReceivedPresetSuggestion = {
+  token: null,
+  term: 'NOT in:sent NOT in:drafts',
+  description: localized('All received messages'),
+  termSuggestions: [],
+};
+
 export function getCurrentTokenAndTerm(query, insertionIndex) {
   const regexp = TokenAndTermRegexp();
   const queryWithSpaces = query.replace(/\s/g, ' ');

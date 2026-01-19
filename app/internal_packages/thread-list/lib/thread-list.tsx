@@ -32,6 +32,7 @@ import * as ThreadListColumns from './thread-list-columns';
 import ThreadListScrollTooltip from './thread-list-scroll-tooltip';
 import ThreadListStore from './thread-list-store';
 import ThreadListContextMenu from './thread-list-context-menu';
+import { setGroupToggleHandler } from './group-toggle-handler';
 
 const ThreadListContent = React.forwardRef<any, any>(
   ({ missingSizes, onFetchMissingSizes, ...listProps }, ref) => (
@@ -55,7 +56,7 @@ ThreadListContent.displayName = 'ThreadListContent';
 
 class ThreadList extends React.Component<
   Record<string, unknown>,
-  { style: string; syncing: boolean }
+  { style: string; syncing: boolean; expandedGroups: Set<string> }
 > {
   static displayName = 'ThreadList';
 
@@ -76,6 +77,7 @@ class ThreadList extends React.Component<
     this.state = {
       style: 'unknown',
       syncing: false,
+      expandedGroups: new Set(),
     };
   }
 
@@ -88,9 +90,16 @@ class ThreadList extends React.Component<
     window.addEventListener('resize', this._onResize, true);
     ReactDOM.findDOMNode(this).addEventListener('contextmenu', this._onShowContextMenu);
     this._onResize();
+    this._applyExpandedGroupsToDataSource();
+    setGroupToggleHandler(this._toggleGroupExpanded);
   }
 
   shouldComponentUpdate(nextProps, nextState) {
+    // Set equality isn't handled by isEqualReact, so explicitly allow re-render
+    // when expandedGroups reference changes.
+    if (this.state.expandedGroups !== nextState.expandedGroups) {
+      return true;
+    }
     return !Utils.isEqualReact(this.props, nextProps) || !Utils.isEqualReact(this.state, nextState);
   }
 
@@ -98,6 +107,13 @@ class ThreadList extends React.Component<
     this.unsub();
     window.removeEventListener('resize', this._onResize, true);
     ReactDOM.findDOMNode(this).removeEventListener('contextmenu', this._onShowContextMenu);
+    setGroupToggleHandler(null);
+  }
+
+  componentDidUpdate(prevProps, prevState) {
+    if (prevState.expandedGroups !== this.state.expandedGroups) {
+      this._applyExpandedGroupsToDataSource();
+    }
   }
 
   _getFooter() {
@@ -111,12 +127,15 @@ class ThreadList extends React.Component<
   }
 
   render() {
+    const dataSource: any = ThreadListStore.dataSource();
+    const grouping = typeof dataSource.groupingMode === 'function' ? dataSource.groupingMode() : 'thread';
+
     let columns, itemHeight;
     if (this.state.style === 'wide') {
-      columns = ThreadListColumns.Wide;
+      columns = ThreadListColumns.Wide(grouping);
       itemHeight = DOMUtils.getWorkspaceCssNumberProperty('thread-list-item-height-wide', 36);
     } else {
-      columns = ThreadListColumns.Narrow;
+      columns = ThreadListColumns.Narrow(grouping);
       itemHeight = DOMUtils.getWorkspaceCssNumberProperty('thread-list-item-height-narrow', 85);
     }
 
@@ -136,7 +155,8 @@ class ThreadList extends React.Component<
         'thread-list:select-unstarred': this._onSelectUnstarred,
         'thread-list:mark-all-as-read': this._onMarkAllAsRead,
       },
-      onDoubleClick: (thread: Thread) => Actions.popoutThread(thread),
+      onSameItemClick: this._onSameItemClick,
+      onDoubleClick: (item: any) => this._onItemOpen(item),
       onDragItems: this._onDragItems,
       onDragEnd: this._onDragEnd,
     };
@@ -144,12 +164,10 @@ class ThreadList extends React.Component<
     return (
       <FluxContainer
         stores={[ThreadListStore]}
-        getStateFromStores={() => {
-          return {
-            dataSource: ThreadListStore.dataSource(),
-            missingSizes: ThreadListStore.hasMissingSizes(),
-          };
-        }}
+        getStateFromStores={() => ({
+          dataSource: ThreadListStore.dataSource(),
+          missingSizes: ThreadListStore.hasMissingSizes(),
+        })}
       >
         <FocusContainer collection="thread" {...listProps}>
           <ThreadListContent ref={this.listRef} onFetchMissingSizes={this._fetchMissingSizes} />
@@ -159,9 +177,15 @@ class ThreadList extends React.Component<
   }
 
   _threadPropsProvider(item) {
+    const targetThreads = item && item.__groupThreads ? item.__groupThreads : [item];
     let classes = classnames({
       unread: item.unread,
     });
+    if (item.__groupChildOf) {
+      classes += ' group-child';
+    } else if (item.__groupType === 'sender') {
+      classes += ' group-parent';
+    }
     classes += ExtensionRegistry.ThreadList.extensions()
       .filter(ext => ext.cssClassNamesForThreadListItem != null)
       .reduce((prev, ext) => prev + ' ' + ext.cssClassNamesForThreadListItem(item), ' ');
@@ -170,13 +194,13 @@ class ThreadList extends React.Component<
 
     props.shouldEnableSwipe = () => {
       const perspective = FocusedPerspectiveStore.current();
-      const tasks = perspective.tasksForRemovingItems([item], 'Swipe');
+      const tasks = perspective.tasksForRemovingItems(targetThreads, 'Swipe');
       return tasks.length > 0;
     };
 
     props.onSwipeRightClass = () => {
       const perspective = FocusedPerspectiveStore.current();
-      const tasks = perspective.tasksForRemovingItems([item], 'Swipe');
+      const tasks = perspective.tasksForRemovingItems(targetThreads, 'Swipe');
       if (tasks.length === 0) {
         return null;
       }
@@ -197,7 +221,7 @@ class ThreadList extends React.Component<
 
     props.onSwipeRight = function(callback) {
       const perspective = FocusedPerspectiveStore.current();
-      const tasks = perspective.tasksForRemovingItems([item], 'Swipe');
+      const tasks = perspective.tasksForRemovingItems(targetThreads, 'Swipe');
       if (tasks.length === 0) {
         callback(false);
       }
@@ -221,11 +245,14 @@ class ThreadList extends React.Component<
 
         const element = document.querySelector(`[data-item-id="${item.id}"]`);
         const originRect = element.getBoundingClientRect();
-        Actions.openPopover(<SnoozePopover threads={[item]} swipeCallback={callback} />, {
+        Actions.openPopover(
+          <SnoozePopover threads={targetThreads} swipeCallback={callback} />,
+          {
           originRect,
           direction: 'right',
           fallbackDirection: 'down',
-        });
+          }
+        );
       };
     }
 
@@ -251,16 +278,18 @@ class ThreadList extends React.Component<
       event.preventDefault();
       return;
     }
+    const threads = this._threadsFromItems(items);
     new ThreadListContextMenu({
-      threadIds: items.map(t => t.id),
-      accountIds: _.uniq(items.map(t => t.accountId)),
+      threadIds: threads.map(t => t.id),
+      accountIds: _.uniq(threads.map(t => t.accountId)),
     }).displayMenu();
   };
 
   _onDragItems = (event, items) => {
+    const threads = this._threadsFromItems(items);
     const data = {
-      threadIds: items.map(t => t.id),
-      accountIds: _.uniq(items.map(t => t.accountId)),
+      threadIds: threads.map(t => t.id),
+      accountIds: _.uniq(threads.map(t => t.accountId)),
     };
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.dragEffect = 'move';
@@ -268,7 +297,7 @@ class ThreadList extends React.Component<
     const canvas = CanvasUtils.canvasForDragging('threads', data.threadIds.length);
     event.dataTransfer.setDragImage(canvas, 10, 10);
     event.dataTransfer.setData('mailspring-threads-data', JSON.stringify(data));
-    event.dataTransfer.setData(`mailspring-accounts=${data.accountIds.join(',')}`, '1');
+    event.dataTransfer.setData('mailspring-accounts=' + data.accountIds.join(','), '1');
   };
 
   _onDragEnd = event => {};
@@ -294,12 +323,13 @@ class ThreadList extends React.Component<
     }
     const focused = FocusedContentStore.focused('thread');
     if (focused) {
-      return [focused];
+      const threads = this._threadsFromItems([focused]);
+      return threads.length > 0 ? threads : null;
     } else if (ThreadListStore.dataSource().selection.count() > 0) {
-      return ThreadListStore.dataSource().selection.items();
-    } else {
-      return null;
+      const threads = this._threadsFromItems(ThreadListStore.dataSource().selection.items());
+      return threads.length > 0 ? threads : null;
     }
+    return null;
   }
 
   _onSelectRead = () => {
@@ -345,19 +375,64 @@ class ThreadList extends React.Component<
   _onMarkAllAsRead = () => {
     const dataSource = ThreadListStore.dataSource();
     const items = dataSource.itemsCurrentlyInViewMatching(item => item.unread) as Thread[];
+    const threads = this._threadsFromItems(items);
 
-    if (items.length === 0) {
+    if (threads.length === 0) {
       return;
     }
 
     Actions.queueTask(
       TaskFactory.taskForSettingUnread({
-        threads: items,
+        threads,
         unread: false,
         source: 'Toolbar Button: Thread List',
       })
     );
     Actions.popSheet();
+  };
+
+  _threadsFromItems(items: any[]) {
+    const threads: Thread[] = [];
+    items.forEach(item => {
+      if (!item) return;
+      if (item.__groupThreads) {
+        threads.push(...item.__groupThreads);
+      } else {
+        threads.push(item);
+      }
+    });
+    return _.uniq(threads, t => t.id);
+  }
+
+  _onItemOpen = (item: any) => {
+    if (item && item.__groupThreads && item.__groupThreads.length > 0) {
+      Actions.popoutThread(item.__groupThreads[0]);
+    } else {
+      Actions.popoutThread(item);
+    }
+  };
+
+  _onSameItemClick = (item: any) => {
+    if (!item || item.__groupType !== 'sender') return false;
+    this._toggleGroupExpanded(item.id);
+    return true;
+  };
+
+  _toggleGroupExpanded = (id: string) => {
+    const next = new Set(this.state.expandedGroups);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.setState({ expandedGroups: next });
+  };
+
+  _applyExpandedGroupsToDataSource = () => {
+    const dataSource: any = ThreadListStore.dataSource();
+    if (dataSource && typeof dataSource.setExpandedGroups === 'function') {
+      dataSource.setExpandedGroups(this.state.expandedGroups);
+    }
   };
 }
 
